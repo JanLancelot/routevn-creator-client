@@ -178,13 +178,6 @@ export const createAppService = (params) => {
       const nativeApplicationIdentifier = createNativeApplicationIdentifier();
 
       let iconFileId = null;
-      if (iconFile) {
-        const storedIcon = await projectService.storeFileForProject({
-          projectId,
-          file: iconFile,
-        });
-        iconFileId = storedIcon.fileId;
-      }
 
       const projectEntry = {
         id: projectId,
@@ -207,11 +200,41 @@ export const createAppService = (params) => {
           name,
           description,
           language,
-          iconFileId,
+          iconFileId: null,
         },
       });
 
       await addProjectEntry(projectEntry);
+
+      if (iconFile) {
+        try {
+          const storedIcon = await projectService.storeFileForProject({
+            projectId,
+            file: iconFile,
+          });
+          const storedIconFileId = storedIcon.fileId;
+          await projectService.updateProjectInfoById(projectId, {
+            iconFileId: storedIconFileId,
+          });
+          await addProjectEntry({
+            ...projectEntry,
+            iconFileId: storedIconFileId,
+          });
+          iconFileId = storedIconFileId;
+          projectEntry.iconFileId = storedIconFileId;
+        } catch (error) {
+          console.error("Failed to save project icon:", error);
+          const copy = appService.getAppCopy?.() ?? {};
+          appService.showToast({
+            title: copy.errorTitle ?? "Error",
+            message:
+              copy.failedSaveProjectIcon ??
+              "The project was created, but its icon could not be saved.",
+            status: "error",
+          });
+        }
+      }
+
       const fullProject = { ...projectEntry };
       if (iconFileId) {
         const iconResult = await platformAdapter.loadProjectIcon({

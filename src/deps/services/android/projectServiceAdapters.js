@@ -36,6 +36,7 @@ import {
 import { toBootstrappedDraftEvent } from "../shared/collab/clientStoreHistory.js";
 import { assertSafeProjectFileId } from "../../../internal/projectFileIds.js";
 import { normalizeProjectLanguage } from "../../../internal/projectLanguage.js";
+import { PROJECT_STORAGE_NOT_EMPTY_MESSAGE } from "../../../internal/projectInitialization.js";
 import { createWebIconAssets } from "../../clients/web/webIconAssets.js";
 import {
   filterTemplateFileIds,
@@ -294,6 +295,17 @@ const ensureAndroidProjectStorage = (projectId) => {
       label: "Android project id",
     }),
   });
+};
+
+const assertUnusedAndroidProjectStorage = (projectId) => {
+  const status = callAndroidBridge("getProjectStorageStatus", {
+    projectId: assertSafeAndroidStorageSegment(projectId, {
+      label: "Android project id",
+    }),
+  });
+  if (status?.exists !== false) {
+    throw new Error(PROJECT_STORAGE_NOT_EMPTY_MESSAGE);
+  }
 };
 
 const writeAndroidProjectFile = ({ projectId, fileId, bytes, mimeType }) => {
@@ -627,6 +639,8 @@ export const createAndroidProjectServiceAdapters = ({
         throw new Error("Template is required for project initialization");
       }
 
+      assertUnusedAndroidProjectStorage(safeProjectId);
+
       ensureAndroidProjectStorage(safeProjectId);
 
       const loadedTemplateData = await loadTemplate(template);
@@ -661,8 +675,6 @@ export const createAndroidProjectServiceAdapters = ({
         clientTs: initialClientTs,
       });
 
-      await store.clearEvents();
-      await store.clearMaterializedViewCheckpoints();
       await store.insertDraft(toBootstrappedDraftEvent(initialEvent, 0));
       await store.saveMaterializedViewCheckpoint({
         viewName: MAIN_VIEW_NAME,

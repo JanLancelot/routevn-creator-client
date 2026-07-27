@@ -10,6 +10,7 @@ const mocked = vi.hoisted(() => ({
   resolveResource: vi.fn(),
   convertFileSrc: vi.fn((value) => value),
   invoke: vi.fn(async () => {}),
+  channels: [],
   connection: {
     init: vi.fn(async () => {}),
     select: vi.fn(async () => []),
@@ -52,6 +53,15 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
+  Channel: class {
+    constructor() {
+      mocked.channels.push(this);
+    }
+
+    set onmessage(handler) {
+      this.messageHandler = handler;
+    }
+  },
   convertFileSrc: mocked.convertFileSrc,
   invoke: mocked.invoke,
 }));
@@ -185,6 +195,7 @@ describe("tauri project service adapters preflight reads", () => {
     mocked.resolveResource.mockReset();
     mocked.convertFileSrc.mockClear();
     mocked.invoke.mockReset();
+    mocked.channels.length = 0;
     mocked.connection.init.mockClear();
     mocked.connection.select.mockReset();
     mocked.connection.execute.mockReset();
@@ -376,6 +387,50 @@ describe("tauri project service adapters preflight reads", () => {
         ],
       }),
     );
+  });
+
+  it("forwards streamed native ZIP progress through a Tauri channel", async () => {
+    mocked.exists.mockResolvedValue(true);
+    mocked.invoke.mockImplementation(async (command, payload) => {
+      if (command === "create_distribution_zip_streamed") {
+        payload.onProgress.messageHandler({
+          phase: "writePackage",
+          current: 2,
+          total: 4,
+        });
+      }
+      return {
+        assetCount: 1,
+        rawAssetBytes: 4,
+        storedChunkBytes: 4,
+        packageBinBytes: 4,
+        zipBytes: 4,
+      };
+    });
+    const onProgress = vi.fn();
+    const { fileAdapter } = createTauriProjectServiceAdapters({
+      collabLog: () => {},
+      creatorVersion: 2,
+    });
+
+    await fileAdapter.createDistributionZipStreamedToPath({
+      projectData: { bundleMetadata: { project: { namespace: "demo" } } },
+      fileEntries: [{ fileId: "image-1", mimeType: "image/png" }],
+      outputPath: "/exports/demo.zip",
+      options: { onProgress },
+      staticFiles: {},
+      getCurrentReference: () => ({
+        projectPath: "/projects/demo",
+        cacheKey: "/projects/demo",
+      }),
+    });
+
+    expect(mocked.channels).toHaveLength(1);
+    expect(onProgress).toHaveBeenCalledWith({
+      phase: "writePackage",
+      current: 2,
+      total: 4,
+    });
   });
 
   it("forwards all Windows release metadata to portable and installer exports", async () => {

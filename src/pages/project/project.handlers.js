@@ -1,7 +1,17 @@
 import { requireProjectResolution } from "../../internal/projectResolution.js";
 import { requireProjectLanguage } from "../../internal/projectLanguage.js";
 import { createProjectStateStream } from "../../deps/services/shared/projectStateStream.js";
-import { EMPTY, from, switchMap, tap } from "rxjs";
+import {
+  catchError,
+  defer,
+  EMPTY,
+  firstValueFrom,
+  from,
+  retry,
+  switchMap,
+  tap,
+  timer,
+} from "rxjs";
 import {
   formatProjectPageCopy,
   selectProjectPageCopy,
@@ -18,6 +28,8 @@ const ICON_VALIDATIONS = [
     minHeight: 512,
   },
 ];
+const SCENE_TEXT_ANALYTICS_RETRY_DELAY_MS = 250;
+const SCENE_TEXT_ANALYTICS_RETRY_COUNT = 2;
 
 const beginProjectAnalyticsRefresh = (deps, { repositoryState } = {}) => {
   const { store, render } = deps;
@@ -28,8 +40,9 @@ const beginProjectAnalyticsRefresh = (deps, { repositoryState } = {}) => {
 
   store.setProjectAnalyticsRequestId({ requestId });
   store.setProjectAnalytics({ analytics });
-  store.setSceneTextAnalyticsError({ hasError: false });
-  store.setSceneTextAnalyticsLoading({ isLoading: sceneIds.length > 0 });
+  store.setSceneTextAnalyticsStatus({
+    status: sceneIds.length > 0 ? "loading" : "ready",
+  });
   render();
 
   return {
@@ -44,26 +57,42 @@ const beginProjectAnalyticsRefresh = (deps, { repositoryState } = {}) => {
 const loadProjectAnalytics = async (deps, request) => {
   const { projectService } = deps;
 
-  try {
-    const sceneTextStatsById = await projectService.ensureSceneTextStats({
-      sceneIds: request.sceneIds,
-      language: request.language,
-    });
-    return {
-      analytics: buildProjectAnalytics({
-        repositoryState: request.repositoryState,
-        sceneTextStatsById,
-      }),
-      hasError: false,
-      requestId: request.requestId,
-    };
-  } catch {
-    return {
-      analytics: request.analytics,
-      hasError: true,
-      requestId: request.requestId,
-    };
+  const sceneTextStatsById = await projectService.ensureSceneTextStats({
+    sceneIds: request.sceneIds,
+    language: request.language,
+  });
+  const hasAllSceneTextStats = request.sceneIds.every(
+    (sceneId) => sceneTextStatsById[sceneId]?.language === request.language,
+  );
+  if (!hasAllSceneTextStats) {
+    throw new Error("Scene text analytics recalculation is incomplete.");
   }
+
+  return {
+    analytics: buildProjectAnalytics({
+      repositoryState: request.repositoryState,
+      sceneTextStatsById,
+    }),
+    requestId: request.requestId,
+  };
+};
+
+const createProjectAnalyticsLoadStream = (deps, request) => {
+  const { store } = deps;
+
+  return defer(() => {
+    if (store.selectProjectAnalyticsRequestId() !== request.requestId) {
+      return EMPTY;
+    }
+
+    return from(loadProjectAnalytics(deps, request));
+  }).pipe(
+    retry({
+      count: SCENE_TEXT_ANALYTICS_RETRY_COUNT,
+      delay: (_error, retryCount) =>
+        timer(SCENE_TEXT_ANALYTICS_RETRY_DELAY_MS * 2 ** (retryCount - 1)),
+    }),
+  );
 };
 
 const completeProjectAnalyticsRefresh = (deps, result) => {
@@ -73,19 +102,48 @@ const completeProjectAnalyticsRefresh = (deps, result) => {
   }
 
   store.setProjectAnalytics({ analytics: result.analytics });
-  store.setSceneTextAnalyticsError({ hasError: result.hasError });
-  store.setSceneTextAnalyticsLoading({ isLoading: false });
+  store.setSceneTextAnalyticsStatus({ status: "ready" });
   render();
 };
 
-const refreshProjectAnalytics = async (deps, { repositoryState } = {}) => {
+const failProjectAnalyticsRefresh = (deps, request) => {
+  const { store, render } = deps;
+  if (store.selectProjectAnalyticsRequestId() !== request.requestId) {
+    return false;
+  }
+
+  store.setSceneTextAnalyticsStatus({ status: "error" });
+  render();
+  return true;
+};
+
+const refreshProjectAnalytics = async (
+  deps,
+  { repositoryState, showFailureToast = false } = {},
+) => {
+  const { appService, i18n } = deps;
   const request = beginProjectAnalyticsRefresh(deps, { repositoryState });
   if (request.sceneIds.length === 0) {
     return;
   }
 
-  const result = await loadProjectAnalytics(deps, request);
-  completeProjectAnalyticsRefresh(deps, result);
+  try {
+    const result = await firstValueFrom(
+      createProjectAnalyticsLoadStream(deps, request),
+      { defaultValue: undefined },
+    );
+    if (result) {
+      completeProjectAnalyticsRefresh(deps, result);
+    }
+  } catch {
+    const isCurrentRequest = failProjectAnalyticsRefresh(deps, request);
+    if (isCurrentRequest && showFailureToast) {
+      const copy = selectProjectPageCopy(i18n);
+      appService.showToast({
+        message: copy.failedCalculateSceneTextAnalytics,
+      });
+    }
+  }
 };
 
 export const handleBeforeMount = (deps) => {
@@ -110,15 +168,23 @@ export const handleBeforeMount = (deps) => {
           return EMPTY;
         }
 
-        return from(loadProjectAnalytics(deps, request));
-      }),
-      tap((result) => {
-        completeProjectAnalyticsRefresh(deps, result);
+        return createProjectAnalyticsLoadStream(deps, request).pipe(
+          tap((result) => {
+            completeProjectAnalyticsRefresh(deps, result);
+          }),
+          catchError(() => {
+            failProjectAnalyticsRefresh(deps, request);
+            return EMPTY;
+          }),
+        );
       }),
     )
     .subscribe();
 
   return () => {
+    store.setProjectAnalyticsRequestId({
+      requestId: store.selectProjectAnalyticsRequestId() + 1,
+    });
     subscription.unsubscribe();
   };
 };
@@ -324,6 +390,15 @@ export const handleEditFormAction = async (deps, payload) => {
   subject.dispatch("project-image-update");
   await refreshProjectAnalytics(deps, {
     repositoryState: projectService.getRepositoryState(),
+    showFailureToast: true,
+  });
+};
+
+export const handleSceneTextAnalyticsRetry = async (deps) => {
+  const { projectService } = deps;
+  await refreshProjectAnalytics(deps, {
+    repositoryState: projectService.getRepositoryState(),
+    showFailureToast: true,
   });
 };
 

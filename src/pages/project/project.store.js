@@ -46,11 +46,8 @@ export const createInitialState = () => ({
   editIconFileId: undefined,
   editIconCropFile: undefined,
   projectAnalyticsRequestId: 0,
-  analytics: {
-    ...buildProjectAnalytics(),
-    isSceneTextLoading: true,
-    hasSceneTextError: false,
-  },
+  sceneTextAnalyticsStatus: "loading",
+  analytics: buildProjectAnalytics(),
 });
 
 export const setPlatform = ({ state }, { platform } = {}) => {
@@ -125,12 +122,8 @@ export const setProjectAnalyticsRequestId = ({ state }, { requestId } = {}) => {
   state.projectAnalyticsRequestId = requestId;
 };
 
-export const setSceneTextAnalyticsLoading = ({ state }, { isLoading } = {}) => {
-  state.analytics.isSceneTextLoading = Boolean(isLoading);
-};
-
-export const setSceneTextAnalyticsError = ({ state }, { hasError } = {}) => {
-  state.analytics.hasSceneTextError = Boolean(hasError);
+export const setSceneTextAnalyticsStatus = ({ state }, { status } = {}) => {
+  state.sceneTextAnalyticsStatus = status;
 };
 
 export const openEditIconCropDialog = ({ state }, { file } = {}) => {
@@ -170,10 +163,14 @@ export const selectViewData = ({ state, i18n }) => {
   const showCharacterCount =
     getProjectLanguageTextCountMode(state.project.language) ===
     PROJECT_TEXT_COUNT_MODE_CHARACTER;
-  const hasUnavailableSceneTextStats = state.analytics.scenes.some(
+  const hasMissingSceneTextStats = state.analytics.scenes.some(
     (scene) => scene.textStats?.language !== state.project.language,
   );
-  const sceneTextStats = hasUnavailableSceneTextStats
+  const hasSceneTextError = state.sceneTextAnalyticsStatus === "error";
+  const isSceneTextLoading =
+    state.sceneTextAnalyticsStatus === "loading" ||
+    (!hasSceneTextError && hasMissingSceneTextStats);
+  const sceneTextStats = hasMissingSceneTextStats
     ? []
     : state.analytics.scenes.map((scene) => ({
         id: scene.id,
@@ -301,9 +298,8 @@ export const selectViewData = ({ state, i18n }) => {
     totalTextCountLabel: showCharacterCount
       ? copy.totalCharactersLabel
       : copy.totalWordsLabel,
-    isSceneTextLoading: state.analytics.isSceneTextLoading,
-    hasSceneTextError:
-      state.analytics.hasSceneTextError || hasUnavailableSceneTextStats,
+    hasSceneTextError,
+    isSceneTextLoading,
     showNativeProjectActions:
       (state.platform === "android" || state.platform === "ios") &&
       state.project.source === "local",

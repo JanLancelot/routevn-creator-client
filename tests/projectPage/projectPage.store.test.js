@@ -7,6 +7,7 @@ import {
   setCurrentProject,
   setProjectAnalytics,
   setProjectAnalyticsRequestId,
+  setSceneTextAnalyticsStatus,
 } from "../../src/pages/project/project.store.js";
 import { EN_I18N } from "../support/i18n.js";
 
@@ -17,6 +18,22 @@ describe("project page store", () => {
     expect(selectProjectAnalyticsRequestId({ state })).toBe(0);
     setProjectAnalyticsRequestId({ state }, { requestId: 2 });
     expect(selectProjectAnalyticsRequestId({ state })).toBe(2);
+  });
+
+  it("loads until the first analytics snapshot, including an empty project", () => {
+    const state = createInitialState();
+
+    expect(selectViewData({ state, i18n: EN_I18N }).isSceneTextLoading).toBe(
+      true,
+    );
+
+    setProjectAnalytics({ state }, { analytics: { scenes: [] } });
+    setSceneTextAnalyticsStatus({ state }, { status: "ready" });
+
+    const viewData = selectViewData({ state, i18n: EN_I18N });
+    expect(viewData.isSceneTextLoading).toBe(false);
+    expect(viewData.hasSceneTextError).toBe(false);
+    expect(viewData.sceneCount).toBe("0");
   });
 
   it("shows project language in detail and the edit form", () => {
@@ -133,6 +150,7 @@ describe("project page store", () => {
         },
       },
     );
+    setSceneTextAnalyticsStatus({ state }, { status: "ready" });
 
     const viewData = selectViewData({ state, i18n: EN_I18N });
 
@@ -165,7 +183,7 @@ describe("project page store", () => {
     expect(viewData.sceneCountLabel).toBe("Total Scenes");
     expect(viewData.totalTextCount).toBe("1,234");
     expect(viewData.totalTextCountLabel).toBe("Total Words");
-    expect(viewData.hasSceneTextError).toBe(false);
+    expect(viewData.isSceneTextLoading).toBe(false);
 
     setCurrentProject(
       { state },
@@ -180,7 +198,7 @@ describe("project page store", () => {
 
     expect(staleLanguageViewData.sceneTextStats).toEqual([]);
     expect(staleLanguageViewData.sceneCount).toBe("1");
-    expect(staleLanguageViewData.hasSceneTextError).toBe(true);
+    expect(staleLanguageViewData.isSceneTextLoading).toBe(true);
 
     setProjectAnalytics(
       { state },
@@ -207,10 +225,10 @@ describe("project page store", () => {
     expect(japaneseViewData.sceneTextCountLabel).toBe("Characters");
     expect(japaneseViewData.totalTextCount).toBe("5,678");
     expect(japaneseViewData.totalTextCountLabel).toBe("Total Characters");
-    expect(japaneseViewData.hasSceneTextError).toBe(false);
+    expect(japaneseViewData.isSceneTextLoading).toBe(false);
   });
 
-  it("reports missing scene text statistics as unavailable without losing the scene count", () => {
+  it("keeps loading while scene text statistics are missing", () => {
     const state = createInitialState();
     setProjectAnalytics(
       { state },
@@ -232,6 +250,31 @@ describe("project page store", () => {
     expect(viewData.sceneCount).toBe("1");
     expect(viewData.sceneTextStats).toEqual([]);
     expect(viewData.totalTextCount).toBe("0");
+    expect(viewData.isSceneTextLoading).toBe(true);
+  });
+
+  it("stops loading when scene text analytics reach an error state", () => {
+    const state = createInitialState();
+    setProjectAnalytics(
+      { state },
+      {
+        analytics: {
+          scenes: [
+            {
+              id: "scene-1",
+              name: "Opening",
+              textStats: undefined,
+            },
+          ],
+        },
+      },
+    );
+    setSceneTextAnalyticsStatus({ state }, { status: "error" });
+
+    const viewData = selectViewData({ state, i18n: EN_I18N });
+
+    expect(viewData.isSceneTextLoading).toBe(false);
     expect(viewData.hasSceneTextError).toBe(true);
+    expect(viewData.sceneTextStats).toEqual([]);
   });
 });

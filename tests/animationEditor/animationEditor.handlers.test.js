@@ -4,19 +4,23 @@ import {
   handleAddKeyframeFromTimeline,
   handleAddKeyframeFormSubmit,
   handleAddPropertiesClick,
+  handleAddPropertySideMenuItemClick,
   handleAddPropertyFormChange,
   handleAddPropertyFormSubmit,
   handleBeforeMount,
   handleConfirmMaskImageSelection,
   handleEditKeyframeFormSubmit,
-  handleEditMaskClick,
-  handleEditSelectedKeyframeClick,
+  handleEditorPopoverPositioned,
   handleEditorSurfaceClick,
+  handleEditorTabClick,
+  handleEditorTabKeyDown,
   handleKeyframeClick,
   handleKeyframeSelect,
   handleKeyframeDurationChange,
   handleKeyframeDropdownItemClick,
   handleKeyframeRightClick,
+  handleMaskTimelineRowClick,
+  handleMaskTimelineRowKeyDown,
   handleOpenAddMaskClick,
   handlePropertyNameClick,
   handlePropertyNameRightClick,
@@ -24,6 +28,14 @@ import {
   handleReplayAnimation,
   handleRulerTimeScrub,
   handleSavePreviewClick,
+  handleSelectedKeyframeEditClick,
+  handleSelectedMaskNumberConfirmClick,
+  handleSelectedMaskNumberFieldKeyDown,
+  handleSelectedMaskNumberInputChange,
+  handleSelectedMaskNumberInputKeyDown,
+  handleSelectedMaskProgressDurationClick,
+  handleSelectedMaskSoftnessClick,
+  handleSingleMaskImageKeyDown,
   handleTimelineZoomChange,
   handleTimelineZoomIn,
   handleTimelineZoomOut,
@@ -118,6 +130,62 @@ describe("animationEditor.handlers", () => {
       delta: -0.125,
     });
     expect(render).toHaveBeenCalledTimes(3);
+  });
+
+  it("switches the lower animation editor tab", () => {
+    const store = {
+      selectSelectedEditorTab: vi.fn(() => "tween"),
+      setSelectedEditorTab: vi.fn(),
+    };
+    const render = vi.fn();
+
+    handleEditorTabClick(
+      { store, render },
+      { _event: { currentTarget: { dataset: { tabId: "preview" } } } },
+    );
+
+    expect(store.setSelectedEditorTab).toHaveBeenCalledWith({ tab: "preview" });
+    expect(render).toHaveBeenCalledOnce();
+
+    store.selectSelectedEditorTab.mockReturnValue("preview");
+    handleEditorTabClick(
+      { store, render },
+      { _event: { currentTarget: { dataset: { tabId: "preview" } } } },
+    );
+
+    expect(store.setSelectedEditorTab).toHaveBeenCalledOnce();
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("switches and focuses animation editor tabs from the keyboard", () => {
+    const focus = vi.fn();
+    const querySelector = vi.fn(() => ({ focus }));
+    const store = {
+      selectSelectedEditorTab: vi.fn(() => "tween"),
+      setSelectedEditorTab: vi.fn(),
+    };
+    const render = vi.fn();
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    handleEditorTabKeyDown(
+      { refs: { animationEditorTabs: { querySelector } }, store, render },
+      {
+        _event: {
+          currentTarget: { dataset: { tabId: "tween" } },
+          key: "ArrowRight",
+          preventDefault,
+          stopPropagation,
+        },
+      },
+    );
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(querySelector).toHaveBeenCalledWith('[data-tab-id="preview"]');
+    expect(focus).toHaveBeenCalledOnce();
+    expect(store.setSelectedEditorTab).toHaveBeenCalledWith({ tab: "preview" });
+    expect(render).toHaveBeenCalledOnce();
   });
 
   it("renders on timeline scroll only when playhead visibility changes", () => {
@@ -499,6 +567,46 @@ describe("animationEditor.handlers", () => {
     expect(render).toHaveBeenCalled();
   });
 
+  it("opens and prefills the selected keyframe edit dialog", () => {
+    const selectedKeyframe = {
+      side: "update",
+      property: "x",
+      index: 1,
+    };
+    const values = {
+      delay: 100,
+      duration: 800,
+      easing: "linear",
+      relative: false,
+      value: 20,
+    };
+    const editKeyframeForm = {
+      reset: vi.fn(),
+      setValues: vi.fn(),
+    };
+    const store = {
+      selectSelectedKeyframe: vi.fn(() => selectedKeyframe),
+      selectSelectedKeyframeFormValues: vi.fn(() => values),
+      setPopover: vi.fn(),
+    };
+    const render = vi.fn();
+
+    handleSelectedKeyframeEditClick(
+      { refs: { editKeyframeForm }, store, render },
+      { _event: { clientX: 40, clientY: 80 } },
+    );
+
+    expect(store.setPopover).toHaveBeenCalledWith({
+      mode: "editKeyframe",
+      x: 40,
+      y: 80,
+      payload: selectedKeyframe,
+    });
+    expect(render).toHaveBeenCalledOnce();
+    expect(editKeyframeForm.reset).toHaveBeenCalledOnce();
+    expect(editKeyframeForm.setValues).toHaveBeenCalledWith({ values });
+  });
+
   it("opens touch editing surfaces when timeline items are tapped", () => {
     const selectedKeyframe = {
       side: "prev",
@@ -740,45 +848,165 @@ describe("animationEditor.handlers", () => {
     },
   );
 
-  it("opens and explicitly prefills keyframe editing from the detail panel", () => {
-    const selectedKeyframe = {
-      side: "update",
-      property: "x",
-      index: 1,
-    };
-    const values = {
-      delay: 200,
-      duration: 800,
-      easing: "easeInOutQuad",
-      relative: true,
-      value: 20,
-    };
+  it("opens number popovers for selected mask softness and duration", () => {
     const store = {
-      selectSelectedKeyframe: vi.fn(() => selectedKeyframe),
-      selectSelectedKeyframeFormValues: vi.fn(() => values),
+      selectMaskEditorTransitionMask: vi.fn(() => ({
+        progressDuration: 900,
+        softness: 0.08,
+      })),
       setPopover: vi.fn(),
-    };
-    const editKeyframeForm = {
-      reset: vi.fn(),
-      setValues: vi.fn(),
+      updatePopoverFormValues: vi.fn(),
     };
     const render = vi.fn();
 
-    handleEditSelectedKeyframeClick({
-      refs: { editKeyframeForm },
-      render,
-      store,
+    handleSelectedMaskSoftnessClick(
+      { store, render },
+      { _event: { clientX: 10, clientY: 20 } },
+    );
+    handleSelectedMaskProgressDurationClick(
+      { store, render },
+      { _event: { clientX: 30, clientY: 40 } },
+    );
+
+    expect(store.setPopover).toHaveBeenNthCalledWith(1, {
+      mode: "editSelectedMaskSoftness",
+      x: 10,
+      y: 20,
+      payload: {},
+    });
+    expect(store.setPopover).toHaveBeenNthCalledWith(2, {
+      mode: "editSelectedMaskProgressDuration",
+      x: 30,
+      y: 40,
+      payload: {},
+    });
+    expect(store.updatePopoverFormValues).toHaveBeenNthCalledWith(1, {
+      formValues: { value: 0.08 },
+    });
+    expect(store.updatePopoverFormValues).toHaveBeenNthCalledWith(2, {
+      formValues: { value: 900 },
+    });
+    expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens mask number fields from the keyboard", () => {
+    const store = {
+      selectMaskEditorTransitionMask: vi.fn(() => ({ softness: 0.08 })),
+      setPopover: vi.fn(),
+      updatePopoverFormValues: vi.fn(),
+    };
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    handleSelectedMaskNumberFieldKeyDown(
+      { store, render: vi.fn() },
+      {
+        _event: {
+          clientX: 10,
+          clientY: 20,
+          currentTarget: {
+            dataset: { maskNumberField: "softness" },
+          },
+          key: "Enter",
+          preventDefault,
+          stopPropagation,
+        },
+      },
+    );
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(store.setPopover).toHaveBeenCalledWith({
+      mode: "editSelectedMaskSoftness",
+      x: 10,
+      y: 20,
+      payload: {},
+    });
+  });
+
+  it("tracks and confirms selected mask number input values", () => {
+    let popover = {
+      mode: "editSelectedMaskSoftness",
+      formValues: { value: 0.25 },
+    };
+    const store = {
+      bumpPreviewRenderVersion: vi.fn(),
+      closePopover: vi.fn(),
+      queueAutosave: vi.fn(),
+      selectPopover: vi.fn(() => popover),
+      selectPreviewPlaybackFrameId: vi.fn(() => undefined),
+      setTransitionMaskProgressDuration: vi.fn(),
+      setTransitionMaskSoftness: vi.fn(),
+      stopPreviewPlayback: vi.fn(),
+      updatePopoverFormValues: vi.fn(),
+      ...createIdleAutosaveMocks(),
+    };
+    const render = vi.fn();
+
+    handleSelectedMaskNumberInputChange(
+      { store },
+      { _event: { detail: { value: 325 } } },
+    );
+    expect(store.updatePopoverFormValues).toHaveBeenCalledWith({
+      formValues: { value: 325 },
     });
 
-    expect(store.setPopover).toHaveBeenCalledWith({
-      mode: "editKeyframe",
-      x: 0,
-      y: 0,
-      payload: selectedKeyframe,
+    handleSelectedMaskNumberConfirmClick({ store, render });
+    popover = {
+      mode: "editSelectedMaskProgressDuration",
+      formValues: { value: 1200 },
+    };
+    handleSelectedMaskNumberConfirmClick({ store, render });
+
+    expect(store.setTransitionMaskSoftness).toHaveBeenCalledWith({
+      softness: 0.25,
     });
+    expect(store.setTransitionMaskProgressDuration).toHaveBeenCalledWith({
+      duration: 1200,
+    });
+    expect(store.closePopover).toHaveBeenCalledTimes(2);
+    expect(store.bumpPreviewRenderVersion).toHaveBeenCalledTimes(2);
+    expect(store.queueAutosave).toHaveBeenCalledTimes(2);
+    expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("focuses the selected mask number input when its popover opens", () => {
+    const focus = vi.fn();
+
+    handleEditorPopoverPositioned({
+      refs: { selectedMaskNumberInput: { focus } },
+      store: {
+        selectPopover: vi.fn(() => ({
+          mode: "editSelectedMaskSoftness",
+        })),
+      },
+    });
+
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("closes a selected mask number popover with Escape", () => {
+    const store = { closePopover: vi.fn() };
+    const render = vi.fn();
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    handleSelectedMaskNumberInputKeyDown(
+      { store, render },
+      {
+        _event: {
+          key: "Escape",
+          preventDefault,
+          stopPropagation,
+        },
+      },
+    );
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(store.closePopover).toHaveBeenCalledOnce();
     expect(render).toHaveBeenCalledOnce();
-    expect(editKeyframeForm.reset).toHaveBeenCalledOnce();
-    expect(editKeyframeForm.setValues).toHaveBeenCalledWith({ values });
   });
 
   it("updates delay and keyframe values through the edit dialog", () => {
@@ -861,74 +1089,9 @@ describe("animationEditor.handlers", () => {
     expect(render).toHaveBeenCalled();
   });
 
-  it("opens the mask editor dialog from the read-only mask summary", () => {
-    const store = {
-      setPopover: vi.fn(),
-    };
-    const render = vi.fn();
-
-    handleEditMaskClick(
-      {
-        store,
-        render,
-      },
-      {
-        _event: {
-          clientX: 120,
-          clientY: 160,
-        },
-      },
-    );
-
-    expect(store.setPopover).toHaveBeenCalledWith({
-      mode: "editMask",
-      x: 120,
-      y: 160,
-      payload: {},
-    });
-    expect(render).toHaveBeenCalled();
-  });
-
-  it("opens the add-property dialog directly for touch transition animations", () => {
+  it("opens the transition Add menu on touch so Mask remains available", () => {
     const store = {
       selectDialogType: vi.fn(() => "transition"),
-      selectIsTouchMode: vi.fn(() => true),
-      selectDefaultAddPropertySide: vi.fn(() => "next"),
-      setPopover: vi.fn(),
-    };
-    const render = vi.fn();
-
-    handleAddPropertiesClick(
-      {
-        store,
-        render,
-      },
-      {
-        _event: {
-          clientX: 24,
-          clientY: 48,
-          currentTarget: {
-            dataset: {},
-          },
-        },
-      },
-    );
-
-    expect(store.setPopover).toHaveBeenCalledWith({
-      mode: "addProperty",
-      x: 24,
-      y: 48,
-      payload: {
-        side: "next",
-      },
-    });
-    expect(render).toHaveBeenCalled();
-  });
-
-  it("keeps the transition add-property side menu on desktop", () => {
-    const store = {
-      selectDialogType: vi.fn(() => "transition"),
-      selectIsTouchMode: vi.fn(() => false),
       setPopover: vi.fn(),
     };
     const render = vi.fn();
@@ -958,10 +1121,121 @@ describe("animationEditor.handlers", () => {
     expect(render).toHaveBeenCalled();
   });
 
+  it("keeps the transition add-property side menu on desktop", () => {
+    const store = {
+      selectDialogType: vi.fn(() => "transition"),
+      setPopover: vi.fn(),
+    };
+    const render = vi.fn();
+
+    handleAddPropertiesClick(
+      {
+        store,
+        render,
+      },
+      {
+        _event: {
+          clientX: 24,
+          clientY: 48,
+          currentTarget: {
+            dataset: {},
+          },
+        },
+      },
+    );
+
+    expect(store.setPopover).toHaveBeenCalledWith({
+      mode: "addPropertySideMenu",
+      x: 24,
+      y: 48,
+      payload: {},
+    });
+    expect(render).toHaveBeenCalled();
+  });
+
+  it("opens Add Mask from the transition Add menu", () => {
+    const store = {
+      selectPopover: vi.fn(() => ({ x: 24, y: 48 })),
+      setPopover: vi.fn(),
+      startPendingTransitionMask: vi.fn(),
+    };
+    const render = vi.fn();
+
+    handleAddPropertySideMenuItemClick(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            item: { value: "mask" },
+          },
+        },
+      },
+    );
+
+    expect(store.startPendingTransitionMask).toHaveBeenCalledWith({});
+    expect(store.setPopover).toHaveBeenCalledWith({
+      mode: "addMask",
+      x: 24,
+      y: 48,
+      payload: {},
+    });
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("selects the Mask row and opens touch editing only on touch", () => {
+    const desktopStore = {
+      closePopover: vi.fn(),
+      selectIsTouchMode: vi.fn(() => false),
+      setSelectedMask: vi.fn(),
+    };
+    const desktopRender = vi.fn();
+    handleMaskTimelineRowClick(
+      { store: desktopStore, render: desktopRender },
+      { _event: { clientX: 30, clientY: 60 } },
+    );
+    expect(desktopStore.setSelectedMask).toHaveBeenCalledWith({});
+    expect(desktopStore.closePopover).toHaveBeenCalledWith();
+
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    handleMaskTimelineRowKeyDown(
+      { store: desktopStore, render: desktopRender },
+      {
+        _event: {
+          clientX: 30,
+          clientY: 60,
+          key: "Enter",
+          preventDefault,
+          stopPropagation,
+        },
+      },
+    );
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(desktopStore.setSelectedMask).toHaveBeenCalledTimes(2);
+
+    const touchStore = {
+      selectIsTouchMode: vi.fn(() => true),
+      setPopover: vi.fn(),
+      setSelectedMask: vi.fn(),
+    };
+    handleMaskTimelineRowClick(
+      { store: touchStore, render: vi.fn() },
+      { _event: { clientX: 30, clientY: 60 } },
+    );
+    expect(touchStore.setPopover).toHaveBeenCalledWith({
+      mode: "editMask",
+      x: 30,
+      y: 60,
+      payload: {},
+    });
+  });
+
   it("commits a pending transition mask", () => {
     const store = {
       commitPendingTransitionMask: vi.fn(),
       closePopover: vi.fn(),
+      setSelectedMask: vi.fn(),
       selectPopover: vi.fn(() => ({
         mode: "none",
       })),
@@ -969,6 +1243,10 @@ describe("animationEditor.handlers", () => {
       stopPreviewPlayback: vi.fn(),
       bumpPreviewRenderVersion: vi.fn(),
       queueAutosave: vi.fn(),
+      selectMaskEditorTransitionMask: vi.fn(() => ({
+        kind: "single",
+        imageId: "image-mask",
+      })),
       selectAutosaveInFlight: vi.fn(() => false),
       selectAutosavePersistedVersion: vi.fn(() => 1),
       selectAutosaveVersion: vi.fn(() => 1),
@@ -976,15 +1254,39 @@ describe("animationEditor.handlers", () => {
     const render = vi.fn();
 
     handleAddMaskClick({
+      appService: { showToast: vi.fn() },
       store,
       render,
     });
 
     expect(store.commitPendingTransitionMask).toHaveBeenCalledWith({});
+    expect(store.setSelectedMask).toHaveBeenCalledWith({});
     expect(store.closePopover).toHaveBeenCalledWith();
     expect(store.bumpPreviewRenderVersion).toHaveBeenCalledWith({});
     expect(render).toHaveBeenCalled();
     expect(store.queueAutosave).toHaveBeenCalled();
+  });
+
+  it("keeps an incomplete pending mask open", () => {
+    const appService = { showToast: vi.fn() };
+    const store = {
+      commitPendingTransitionMask: vi.fn(),
+      selectMaskEditorTransitionMask: vi.fn(() => ({
+        kind: "single",
+        imageId: undefined,
+      })),
+      setSelectedMask: vi.fn(),
+      closePopover: vi.fn(),
+    };
+
+    handleAddMaskClick({ appService, i18n: EN_I18N, store, render: vi.fn() });
+
+    expect(appService.showToast).toHaveBeenCalledWith({
+      message: "Select an image for the mask.",
+    });
+    expect(store.commitPendingTransitionMask).not.toHaveBeenCalled();
+    expect(store.setSelectedMask).not.toHaveBeenCalled();
+    expect(store.closePopover).not.toHaveBeenCalled();
   });
 
   it("opens the shared image selector for preview slots", () => {
@@ -1019,6 +1321,57 @@ describe("animationEditor.handlers", () => {
       selectedImageId: "image-current",
     });
     expect(render).toHaveBeenCalled();
+  });
+
+  it("opens the single mask image selector from the keyboard", () => {
+    const store = {
+      selectMaskEditorTransitionMask: vi.fn(() => ({
+        imageId: "image-mask",
+      })),
+      showImageSelectorDialog: vi.fn(),
+    };
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    const render = vi.fn();
+
+    handleSingleMaskImageKeyDown(
+      { store, render },
+      { _event: { key: " ", preventDefault, stopPropagation } },
+    );
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(store.showImageSelectorDialog).toHaveBeenCalledWith({
+      target: "single",
+      index: undefined,
+      selectedImageId: "image-mask",
+    });
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("requires a selected image before confirming a single mask image", async () => {
+    const appService = { showToast: vi.fn() };
+    const store = {
+      hideImageSelectorDialog: vi.fn(),
+      selectImageSelectorDialog: vi.fn(() => ({
+        target: "single",
+        selectedImageId: undefined,
+      })),
+      setTransitionMaskImage: vi.fn(),
+    };
+
+    await handleConfirmMaskImageSelection({
+      appService,
+      i18n: EN_I18N,
+      store,
+      render: vi.fn(),
+    });
+
+    expect(appService.showToast).toHaveBeenCalledWith({
+      message: "Select an image for the mask.",
+    });
+    expect(store.setTransitionMaskImage).not.toHaveBeenCalled();
+    expect(store.hideImageSelectorDialog).not.toHaveBeenCalled();
   });
 
   it("preserves zero initial values when adding a property", () => {

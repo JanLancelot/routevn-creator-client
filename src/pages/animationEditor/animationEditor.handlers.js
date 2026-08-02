@@ -4,7 +4,10 @@ import {
   getAnimationEditorBackPath,
   resolveAnimationEditorPayload,
 } from "../../internal/animationEditorRoute.js";
-import { serializeTransitionMask } from "../../internal/animationMasks.js";
+import {
+  isTransitionMaskComplete,
+  serializeTransitionMask,
+} from "../../internal/animationMasks.js";
 import { resolveResourceFileType } from "../../internal/resourceFileMetadata.js";
 import { createFileExplorerKeyboardScopeHandlers } from "../../internal/ui/fileExplorerKeyboardScope.js";
 import { runResourcePageMutation } from "../../internal/ui/resourcePages/resourcePageErrors.js";
@@ -956,12 +959,7 @@ export const handleMobileMaskClick = (deps, payload = {}) => {
   };
 
   if (store.selectHasEffectiveTransitionMask()) {
-    store.setPopover({
-      mode: "editMask",
-      x: popoverPosition.x,
-      y: popoverPosition.y,
-      payload: {},
-    });
+    store.setSelectedEditorTab({ tab: "mask" });
     render();
     return;
   }
@@ -993,19 +991,6 @@ export const handleAddPropertiesClick = (deps, payload) => {
   const side = payload._event.currentTarget?.dataset?.side;
 
   if (!side && store.selectDialogType() === "transition") {
-    if (store.selectIsTouchMode()) {
-      store.setPopover({
-        mode: "addProperty",
-        x: payload._event.clientX,
-        y: payload._event.clientY,
-        payload: {
-          side: store.selectDefaultAddPropertySide(),
-        },
-      });
-      render();
-      return;
-    }
-
     store.setPopover({
       mode: "addPropertySideMenu",
       x: payload._event.clientX,
@@ -1037,6 +1022,61 @@ export const handleTimelineZoomIn = (deps) => {
   const { render, store } = deps;
   store.nudgeTimelineZoom({ delta: TIMELINE_ZOOM_STEP });
   render();
+};
+
+const EDITOR_TAB_IDS = ["tween", "preview"];
+
+const activateEditorTab = (deps, tab) => {
+  const { render, store } = deps;
+  if (tab === store.selectSelectedEditorTab()) {
+    return;
+  }
+
+  store.setSelectedEditorTab({ tab });
+  render();
+};
+
+export const handleEditorTabClick = (deps, payload) => {
+  activateEditorTab(deps, payload._event.currentTarget.dataset.tabId);
+};
+
+export const handleEditorTabKeyDown = (deps, payload) => {
+  const { refs } = deps;
+  const event = payload._event;
+  const currentTab = event.currentTarget.dataset.tabId;
+  const currentIndex = EDITOR_TAB_IDS.indexOf(currentTab);
+  if (currentIndex < 0) {
+    return;
+  }
+
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    activateEditorTab(deps, currentTab);
+    return;
+  }
+
+  let targetIndex;
+  if (event.key === "ArrowLeft") {
+    targetIndex =
+      (currentIndex - 1 + EDITOR_TAB_IDS.length) % EDITOR_TAB_IDS.length;
+  } else if (event.key === "ArrowRight") {
+    targetIndex = (currentIndex + 1) % EDITOR_TAB_IDS.length;
+  } else if (event.key === "Home") {
+    targetIndex = 0;
+  } else if (event.key === "End") {
+    targetIndex = EDITOR_TAB_IDS.length - 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  const targetTab = EDITOR_TAB_IDS[targetIndex];
+  refs.animationEditorTabs
+    .querySelector(`[data-tab-id="${targetTab}"]`)
+    ?.focus();
+  activateEditorTab(deps, targetTab);
 };
 
 export const handleTimelineZoomOut = (deps) => {
@@ -1189,12 +1229,24 @@ export const handleTimelinePanEnd = (deps, payload) => {
 export const handleAddPropertySideMenuItemClick = (deps, payload) => {
   const { render, store } = deps;
   const side = payload._event.detail.item?.value;
+  const popover = store.selectPopover();
+
+  if (side === "mask") {
+    store.startPendingTransitionMask({});
+    store.setPopover({
+      mode: "addMask",
+      x: popover.x,
+      y: popover.y,
+      payload: {},
+    });
+    render();
+    return;
+  }
 
   if (side !== "prev" && side !== "next") {
     return;
   }
 
-  const popover = store.selectPopover();
   store.setPopover({
     mode: "addProperty",
     x: popover.x,
@@ -1367,6 +1419,11 @@ const openSelectedKeyframeEditDialog = (deps, { x = 0, y = 0 } = {}) => {
   return true;
 };
 
+export const handleSelectedKeyframeEditClick = (deps, payload) => {
+  const { clientX: x, clientY: y } = payload._event;
+  openSelectedKeyframeEditDialog(deps, { x, y });
+};
+
 export const handleKeyframeClick = (deps, payload) => {
   const { render, store } = deps;
   const { index, property, side, x, y } = payload._event.detail;
@@ -1425,15 +1482,128 @@ export const handleKeyframeDurationChange = (deps, payload) => {
   commitSelectedKeyframeChange(deps);
 };
 
-export const handleEditSelectedKeyframeClick = (deps) => {
-  openSelectedKeyframeEditDialog(deps);
-};
-
 const commitSelectedKeyframeChange = (deps) => {
   const { render, store } = deps;
   invalidatePreview({ store });
   render();
   queueEditorAutosave({ deps });
+};
+
+const openSelectedMaskNumberPopover = (deps, payload, { mode, value } = {}) => {
+  const { render, store } = deps;
+  store.setPopover({
+    mode,
+    x: payload._event.clientX,
+    y: payload._event.clientY,
+    payload: {},
+  });
+  store.updatePopoverFormValues({
+    formValues: { value },
+  });
+  render();
+};
+
+export const handleSelectedMaskSoftnessClick = (deps, payload) => {
+  const { store } = deps;
+  openSelectedMaskNumberPopover(deps, payload, {
+    mode: "editSelectedMaskSoftness",
+    value: store.selectMaskEditorTransitionMask()?.softness,
+  });
+};
+
+export const handleSelectedMaskProgressDurationClick = (deps, payload) => {
+  const { store } = deps;
+  openSelectedMaskNumberPopover(deps, payload, {
+    mode: "editSelectedMaskProgressDuration",
+    value: store.selectMaskEditorTransitionMask()?.progressDuration,
+  });
+};
+
+export const handleSelectedMaskNumberFieldKeyDown = (deps, payload) => {
+  const event = payload._event;
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.currentTarget.dataset.maskNumberField === "softness") {
+    handleSelectedMaskSoftnessClick(deps, payload);
+  } else if (
+    event.currentTarget.dataset.maskNumberField === "progress-duration"
+  ) {
+    handleSelectedMaskProgressDurationClick(deps, payload);
+  }
+};
+
+export const handleEditorPopoverPositioned = (deps) => {
+  const { refs, store } = deps;
+  if (
+    ["editSelectedMaskSoftness", "editSelectedMaskProgressDuration"].includes(
+      store.selectPopover().mode,
+    )
+  ) {
+    refs.selectedMaskNumberInput.focus();
+  }
+};
+
+const commitSelectedMaskNumberInput = (deps, value) => {
+  const { store } = deps;
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return;
+  }
+
+  const { mode } = store.selectPopover();
+  if (mode === "editSelectedMaskSoftness") {
+    if (numericValue < 0) {
+      return;
+    }
+    store.setTransitionMaskSoftness({ softness: numericValue });
+  } else if (mode === "editSelectedMaskProgressDuration") {
+    if (numericValue < 1) {
+      return;
+    }
+    store.setTransitionMaskProgressDuration({ duration: numericValue });
+  } else {
+    return;
+  }
+
+  store.closePopover();
+  commitMaskChange(deps);
+};
+
+export const handleSelectedMaskNumberInputChange = (deps, payload) => {
+  const { store } = deps;
+  store.updatePopoverFormValues({
+    formValues: {
+      value: resolveValueChange(payload),
+    },
+  });
+};
+
+export const handleSelectedMaskNumberConfirmClick = (deps) => {
+  const { store } = deps;
+  commitSelectedMaskNumberInput(deps, store.selectPopover().formValues.value);
+};
+
+export const handleSelectedMaskNumberInputKeyDown = (deps, payload) => {
+  const { render, store } = deps;
+  const event = payload._event;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.stopPropagation();
+    commitSelectedMaskNumberInput(deps, event.currentTarget.value);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    store.closePopover();
+    render();
+  }
 };
 
 export const handleAutoTrackClick = (deps, payload) => {
@@ -1484,6 +1654,37 @@ export const handlePropertyNameRightClick = (deps, payload) => {
     },
   });
   render();
+};
+
+const selectMaskTimelineRow = (deps, event) => {
+  const { render, store } = deps;
+  store.setSelectedMask({});
+  if (store.selectIsTouchMode()) {
+    store.setPopover({
+      mode: "editMask",
+      x: event.clientX,
+      y: event.clientY,
+      payload: {},
+    });
+  } else {
+    store.closePopover();
+  }
+  render();
+};
+
+export const handleMaskTimelineRowClick = (deps, payload) => {
+  selectMaskTimelineRow(deps, payload._event);
+};
+
+export const handleMaskTimelineRowKeyDown = (deps, payload) => {
+  const event = payload._event;
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  selectMaskTimelineRow(deps, event);
 };
 
 export const handleKeyframeDropdownItemClick = (deps, payload) => {
@@ -1803,17 +2004,6 @@ export const handleEditInitialValueFormChange = (deps, payload) => {
   render();
 };
 
-export const handleEditMaskClick = (deps, payload) => {
-  const { render, store } = deps;
-  store.setPopover({
-    mode: "editMask",
-    x: payload._event.clientX,
-    y: payload._event.clientY,
-    payload: {},
-  });
-  render();
-};
-
 export const handleOpenAddMaskClick = (deps, payload) => {
   const { render, store } = deps;
   store.startPendingTransitionMask({});
@@ -1827,8 +2017,17 @@ export const handleOpenAddMaskClick = (deps, payload) => {
 };
 
 export const handleAddMaskClick = (deps) => {
-  const { store } = deps;
+  const { appService, store } = deps;
+  if (!isTransitionMaskComplete(store.selectMaskEditorTransitionMask())) {
+    appService.showToast({
+      message:
+        selectCopy(deps).maskImageRequired ?? "Select an image for the mask.",
+    });
+    return;
+  }
+
   store.commitPendingTransitionMask({});
+  store.setSelectedMask({});
   store.closePopover();
   commitMaskChange(deps);
 };
@@ -1836,13 +2035,8 @@ export const handleAddMaskClick = (deps) => {
 export const handleDisableMaskClick = (deps) => {
   const { store } = deps;
   store.disableTransitionMask({});
+  store.closePopover();
   commitMaskChange(deps);
-};
-
-export const handleMobileDisableMaskClick = (deps) => {
-  const { render, store } = deps;
-  store.openMaskRemoveConfirmDialog({});
-  render();
 };
 
 export const handleMaskRemoveConfirmDialogClose = (deps) => {
@@ -1933,35 +2127,15 @@ export const handleSingleMaskImageClick = (deps) => {
   });
 };
 
-export const handleSingleMaskImageRightClick = async (deps, payload) => {
-  const { appService, store } = deps;
-  const copy = selectCopy(deps);
-  const event = payload?._event;
-  event?.preventDefault?.();
-
-  if (!store.selectMaskEditorTransitionMask()?.imageId) {
+export const handleSingleMaskImageKeyDown = (deps, payload) => {
+  const event = payload._event;
+  if (event.key !== "Enter" && event.key !== " ") {
     return;
   }
 
-  const result = await appService.showDropdownMenu({
-    items: [
-      {
-        type: "item",
-        label: copy.removeMenuItem ?? "Remove",
-        key: "remove",
-      },
-    ],
-    x: event.clientX,
-    y: event.clientY,
-    place: "bs",
-  });
-
-  if (!result || result.item?.key !== "remove") {
-    return;
-  }
-
-  store.clearTransitionMaskImage({});
-  commitMaskChange(deps);
+  event.preventDefault();
+  event.stopPropagation();
+  handleSingleMaskImageClick(deps);
 };
 
 export const handleSequenceMaskAddClick = (deps) => {
@@ -2135,6 +2309,14 @@ export const handleConfirmMaskImageSelection = async (deps) => {
   const imageSelectorDialog = store.selectImageSelectorDialog();
   const { index, selectedImageId, target } = imageSelectorDialog;
   const isPreviewImageSelection = isPreviewImageSelectorTarget(target);
+
+  if (target === "single" && !selectedImageId) {
+    appService.showToast({
+      message:
+        selectCopy(deps).maskImageRequired ?? "Select an image for the mask.",
+    });
+    return;
+  }
 
   if (target === "single") {
     store.setTransitionMaskImage({

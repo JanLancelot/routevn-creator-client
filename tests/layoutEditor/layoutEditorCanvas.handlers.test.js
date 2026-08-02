@@ -105,7 +105,12 @@ const createStore = (props) => {
     selectPendingUpdatedItem: bindSelector(
       canvasStore.selectPendingUpdatedItem,
     ),
+    setPendingUpdatedItem: bindAction(canvasStore.setPendingUpdatedItem),
     clearPendingUpdatedItem: bindAction(canvasStore.clearPendingUpdatedItem),
+    startDragging: bindAction(canvasStore.startDragging),
+    stopDragging: bindAction(canvasStore.stopDragging),
+    selectDragging: bindSelector(canvasStore.selectDragging),
+    setDragStartPosition: bindAction(canvasStore.setDragStartPosition),
     selectSelectedOccurrenceOwnerId: bindSelector(
       canvasStore.selectSelectedOccurrenceOwnerId,
     ),
@@ -323,6 +328,100 @@ describe("layoutEditorCanvas pointer selection", () => {
     expect(deps.graphicsService.render).not.toHaveBeenCalled();
   });
 
+  it.each(["move", "right", "rotate"])(
+    "suppresses hover previews during %s dragging",
+    (dragMode) => {
+      const deps = createDeps({ selectedItemId: "parent" });
+      deps.store.setHoveredSelection({
+        selection: {
+          itemId: "child",
+          occurrenceId: "child",
+          bounds: bounds(20, 20, 40, 40),
+        },
+      });
+      deps.store.startDragging({ dragMode });
+
+      handleCanvasPointerMove(deps, {
+        _event: {
+          pointerId: 1,
+          pointerType: "mouse",
+          clientX: 30,
+          clientY: 30,
+          metaKey: false,
+          ctrlKey: false,
+        },
+      });
+
+      expect(deps.store.selectHoveredSelection()).toBeUndefined();
+      expect(deps.graphicsService.hitTestElementBounds).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores a queued hover update after dragging starts", () => {
+    let runFrame;
+    vi.stubGlobal("requestAnimationFrame", (callback) => {
+      runFrame = callback;
+      return 1;
+    });
+    const deps = createDeps({ selectedItemId: "parent" });
+
+    handleCanvasPointerMove(deps, {
+      _event: {
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: 30,
+        clientY: 30,
+        metaKey: false,
+        ctrlKey: false,
+      },
+    });
+    deps.store.startDragging({ dragMode: "move" });
+    runFrame();
+
+    expect(deps.store.selectHoveredSelection()).toBeUndefined();
+    expect(deps.graphicsService.hitTestElementBounds).not.toHaveBeenCalled();
+  });
+
+  it.each(["before", "after"])(
+    "does not turn a renderer drag that starts %s wrapper pointerdown into a parent click",
+    (dragStartOrder) => {
+      const deps = createDeps({ selectedItemId: "child" });
+      const pointerEvent = {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: 30,
+        clientY: 30,
+        metaKey: false,
+        ctrlKey: false,
+        detail: 1,
+      };
+
+      if (dragStartOrder === "before") {
+        deps.store.startDragging({ dragMode: "move" });
+      }
+      handleCanvasPointerDown(deps, { _event: pointerEvent });
+      if (dragStartOrder === "after") {
+        deps.store.startDragging({ dragMode: "move" });
+      }
+      handleCanvasPointerMove(deps, {
+        _event: {
+          ...pointerEvent,
+          clientX: 40,
+          clientY: 40,
+        },
+      });
+      deps.store.stopDragging();
+      handleCanvasPointerUp(deps, { _event: pointerEvent });
+      handleCanvasClick(deps, { _event: pointerEvent });
+
+      expect(deps.store.selectPointerGesture()).toBeUndefined();
+      expect(deps.store.selectPendingClickGesture()).toBeUndefined();
+      expect(deps.dispatchEvent).not.toHaveBeenCalled();
+    },
+  );
+
   it("observes a normal click without consuming the authored gesture", () => {
     const deps = createDeps();
     const event = runClick(deps);
@@ -335,6 +434,103 @@ describe("layoutEditorCanvas pointer selection", () => {
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(event.stopPropagation).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      caseName: "moves the outermost parent before a hover indicator is shown",
+      hoveredSelection: undefined,
+      expectedItemId: "parent",
+      expectedX: 10,
+      expectedY: 5,
+    },
+    {
+      caseName: "moves the child represented by the hover indicator",
+      hoveredSelection: {
+        itemId: "child",
+        occurrenceId: "child",
+        bounds: bounds(20, 20, 40, 40),
+      },
+      expectedItemId: "child",
+      expectedX: 30,
+      expectedY: 25,
+    },
+  ])(
+    "$caseName",
+    async ({ hoveredSelection, expectedItemId, expectedX, expectedY }) => {
+      const deps = createDeps();
+      deps.store.setHoveredSelection({ selection: hoveredSelection });
+      const currentTarget = {
+        setPointerCapture: vi.fn(),
+        releasePointerCapture: vi.fn(),
+      };
+      const pointerEvent = {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        currentTarget,
+        clientX: 30,
+        clientY: 30,
+        metaKey: false,
+        ctrlKey: false,
+      };
+
+      handleCanvasPointerDown(deps, { _event: pointerEvent });
+      await handleCanvasPointerMove(deps, {
+        _event: {
+          ...pointerEvent,
+          clientX: 40.25,
+          clientY: 35.25,
+        },
+      });
+
+      expect(deps.dispatchEvent.mock.calls[0][0]).toMatchObject({
+        type: "selection-change",
+        detail: {
+          itemId: expectedItemId,
+          occurrenceId: expectedItemId,
+        },
+      });
+      expect(deps.store.selectPendingUpdatedItem()).toMatchObject({
+        id: expectedItemId,
+        x: expectedX,
+        y: expectedY,
+      });
+      expect(deps.store.selectDragging()).toMatchObject({
+        isDragging: true,
+        dragMode: "move",
+      });
+      expect(currentTarget.setPointerCapture).toHaveBeenCalledWith(1);
+
+      await handleCanvasPointerUp(deps, {
+        _event: {
+          ...pointerEvent,
+          clientX: 40.25,
+          clientY: 35.25,
+        },
+      });
+
+      const canvasEvents = deps.dispatchEvent.mock.calls.map(
+        ([event]) => event,
+      );
+      expect(
+        canvasEvents.find(({ type }) => type === "drag-update"),
+      ).toMatchObject({
+        detail: {
+          itemId: expectedItemId,
+          updatedItem: expect.objectContaining({ x: expectedX, y: expectedY }),
+        },
+      });
+      expect(canvasEvents.find(({ type }) => type === "update")).toMatchObject({
+        detail: {
+          itemId: expectedItemId,
+          updatedItem: expect.objectContaining({ x: expectedX, y: expectedY }),
+        },
+      });
+      expect(deps.store.selectDragging().isDragging).toBe(false);
+      expect(currentTarget.releasePointerCapture).toHaveBeenCalledWith(1);
+    },
+  );
 
   it("deep-selects with Command and descends one level on double-click", () => {
     const deepDeps = createDeps();
@@ -506,6 +702,11 @@ describe("layoutEditorCanvas pointer selection", () => {
     expect(
       overlayChildren.find(({ id }) => id === "selected-border-anchor").width,
     ).toBe(16);
+    const rotationHandle = overlayChildren.find(
+      ({ id }) => id === "selected-border-rotate",
+    );
+    expect(rotationHandle.width).toBe(32);
+    expect(rotationHandle.cornerRadius).toBe(16);
     expect(deps.store.selectCanvasRenderState().canvasUnitsPerCssPixel).toBe(2);
   });
 

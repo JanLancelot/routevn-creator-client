@@ -787,9 +787,8 @@ export const handleDurationHandleClick = (_deps, payload) => {
   payload._event.stopPropagation();
 };
 
-export const handlePropertyNameClick = (deps, payload) => {
+const dispatchPropertyNameClickEvent = (deps, event, { x, y } = {}) => {
   const { dispatchEvent, props } = deps;
-  const event = payload._event;
   event.stopPropagation();
 
   dispatchEvent(
@@ -797,8 +796,8 @@ export const handlePropertyNameClick = (deps, payload) => {
       detail: {
         property: event.currentTarget.dataset.property,
         side: props.side,
-        x: event.clientX,
-        y: event.clientY,
+        x,
+        y,
       },
       bubbles: true,
       composed: true,
@@ -806,24 +805,34 @@ export const handlePropertyNameClick = (deps, payload) => {
   );
 };
 
-export const handlePropertyNameRightClick = (deps, payload) => {
-  const { dispatchEvent, props } = deps;
-  const event = payload._event;
-  event.preventDefault();
-  event.stopPropagation();
+export const handlePropertyNameClick = (deps, payload) => {
+  if (!deps.props.editable) {
+    return;
+  }
 
-  dispatchEvent(
-    new CustomEvent("property-name-right-click", {
-      detail: {
-        property: event.currentTarget.dataset.property,
-        side: props.side,
-        x: event.clientX,
-        y: event.clientY,
-      },
-      bubbles: true,
-      composed: true,
-    }),
-  );
+  const event = payload._event;
+  dispatchPropertyNameClickEvent(deps, event, {
+    x: event.clientX,
+    y: event.clientY,
+  });
+};
+
+export const handlePropertyNameKeyDown = (deps, payload) => {
+  if (!deps.props.editable) {
+    return;
+  }
+
+  const event = payload._event;
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  const rect = event.currentTarget.getBoundingClientRect();
+  dispatchPropertyNameClickEvent(deps, event, {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  });
 };
 
 export const handleInitialValueClick = (deps, payload) => {

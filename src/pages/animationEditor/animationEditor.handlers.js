@@ -1491,10 +1491,12 @@ const commitSelectedKeyframeChange = (deps) => {
 
 const openSelectedMaskNumberPopover = (deps, payload, { mode, value } = {}) => {
   const { render, store } = deps;
+  const event = payload._event;
+  const rect = event.currentTarget?.getBoundingClientRect?.();
   store.setPopover({
     mode,
-    x: payload._event.clientX,
-    y: payload._event.clientY,
+    x: event.detail?.x ?? event.clientX ?? rect?.left ?? 0,
+    y: event.detail?.y ?? event.clientY ?? rect?.bottom ?? 0,
     payload: {},
   });
   store.updatePopoverFormValues({
@@ -1511,11 +1513,11 @@ export const handleSelectedMaskSoftnessClick = (deps, payload) => {
   });
 };
 
-export const handleSelectedMaskProgressDurationClick = (deps, payload) => {
+export const handleSelectedMaskInitialValueClick = (deps, payload) => {
   const { store } = deps;
   openSelectedMaskNumberPopover(deps, payload, {
-    mode: "editSelectedMaskProgressDuration",
-    value: store.selectMaskEditorTransitionMask()?.progressDuration,
+    mode: "editSelectedMaskInitialValue",
+    value: store.selectMaskEditorTransitionMask()?.progress?.initialValue ?? 0,
   });
 };
 
@@ -1527,19 +1529,18 @@ export const handleSelectedMaskNumberFieldKeyDown = (deps, payload) => {
 
   event.preventDefault();
   event.stopPropagation();
-  if (event.currentTarget.dataset.maskNumberField === "softness") {
-    handleSelectedMaskSoftnessClick(deps, payload);
-  } else if (
-    event.currentTarget.dataset.maskNumberField === "progress-duration"
-  ) {
-    handleSelectedMaskProgressDurationClick(deps, payload);
+  if (event.currentTarget.dataset.maskNumberField === "initial-value") {
+    handleSelectedMaskInitialValueClick(deps, payload);
+    return;
   }
+
+  handleSelectedMaskSoftnessClick(deps, payload);
 };
 
 export const handleEditorPopoverPositioned = (deps) => {
   const { refs, store } = deps;
   if (
-    ["editSelectedMaskSoftness", "editSelectedMaskProgressDuration"].includes(
+    ["editSelectedMaskInitialValue", "editSelectedMaskSoftness"].includes(
       store.selectPopover().mode,
     )
   ) {
@@ -1559,16 +1560,20 @@ const commitSelectedMaskNumberInput = (deps, value) => {
   }
 
   const { mode } = store.selectPopover();
-  if (mode === "editSelectedMaskSoftness") {
+  if (mode === "editSelectedMaskInitialValue") {
+    if (numericValue < 0 || numericValue > 1) {
+      return;
+    }
+    store.updateInitialValue({
+      side: "mask",
+      property: "progress",
+      initialValue: numericValue,
+    });
+  } else if (mode === "editSelectedMaskSoftness") {
     if (numericValue < 0) {
       return;
     }
     store.setTransitionMaskSoftness({ softness: numericValue });
-  } else if (mode === "editSelectedMaskProgressDuration") {
-    if (numericValue < 1) {
-      return;
-    }
-    store.setTransitionMaskProgressDuration({ duration: numericValue });
   } else {
     return;
   }
@@ -1623,6 +1628,11 @@ export const handleAutoTrackClick = (deps, payload) => {
 export const handlePropertyNameClick = (deps, payload) => {
   const { render, store } = deps;
   const { property, side, x, y } = payload._event.detail;
+  if (side === "mask") {
+    selectMaskTimelineRow(deps, { clientX: x, clientY: y });
+    return;
+  }
+
   store.setSelectedProperty({ side, property });
   if (store.selectIsTouchMode()) {
     store.setPopover({
@@ -1637,22 +1647,6 @@ export const handlePropertyNameClick = (deps, payload) => {
   } else {
     store.closePopover();
   }
-  render();
-};
-
-export const handlePropertyNameRightClick = (deps, payload) => {
-  const { render, store } = deps;
-  const { property, side, x, y } = payload._event.detail;
-  store.setSelectedProperty({ side, property });
-  store.setPopover({
-    mode: "propertyNameMenu",
-    x,
-    y,
-    payload: {
-      side,
-      property,
-    },
-  });
   render();
 };
 
@@ -1685,6 +1679,20 @@ export const handleMaskTimelineRowKeyDown = (deps, payload) => {
   event.preventDefault();
   event.stopPropagation();
   selectMaskTimelineRow(deps, event);
+};
+
+export const handleSelectedPropertyDeleteClick = (deps) => {
+  const { render, store } = deps;
+  const selectedProperty = store.selectSelectedProperty();
+  if (!selectedProperty) {
+    return;
+  }
+
+  store.deleteProperty(selectedProperty);
+  store.closePopover();
+  invalidatePreview({ store });
+  render();
+  queueEditorAutosave({ deps });
 };
 
 export const handleKeyframeDropdownItemClick = (deps, payload) => {
@@ -2037,6 +2045,12 @@ export const handleDisableMaskClick = (deps) => {
   store.disableTransitionMask({});
   store.closePopover();
   commitMaskChange(deps);
+};
+
+export const handleMaskRemoveRequestClick = (deps) => {
+  const { render, store } = deps;
+  store.openMaskRemoveConfirmDialog({});
+  render();
 };
 
 export const handleMaskRemoveConfirmDialogClose = (deps) => {

@@ -1800,6 +1800,193 @@ describe("graphicsService", () => {
     });
   });
 
+  it("suppresses only initialization renders for editor-owned canvases", async () => {
+    let effectsHandlerOptions;
+    createEffectsHandlerMock.mockImplementation((options) => {
+      effectsHandlerOptions = options;
+      return vi.fn();
+    });
+    const systemState = {
+      contexts: [
+        {
+          currentPointerMode: "read",
+        },
+      ],
+    };
+    const handleActions = vi.fn(() => {
+      effectsHandlerOptions.routeGraphics.render({
+        id: "interaction-render",
+        elements: [],
+        audio: [],
+        animations: [],
+      });
+    });
+    createRouteEngineMock.mockReturnValue({
+      init: vi.fn(() => {
+        effectsHandlerOptions.routeGraphics.render({
+          id: "initialization-render",
+          elements: [],
+          audio: [],
+          animations: [],
+        });
+      }),
+      selectRenderState: vi.fn(() => ({
+        id: "render-1",
+        elements: [],
+        audio: [],
+        animations: [],
+      })),
+      selectPresentationState: vi.fn(() => undefined),
+      selectPresentationChanges: vi.fn(() => undefined),
+      selectSectionLineChanges: vi.fn(() => []),
+      selectSystemState: vi.fn(() => systemState),
+      handleActions,
+    });
+
+    const { createGraphicsService } = await import(
+      "../../src/deps/services/graphicsService.js"
+    );
+    const service = await createGraphicsService({
+      subject: {
+        dispatch: vi.fn(),
+      },
+    });
+
+    await service.init({
+      canvas: {
+        children: [],
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      },
+      width: 1920,
+      height: 1080,
+    });
+
+    const onRenderState = vi.fn();
+    service.initRouteEngine(
+      {
+        screen: { width: 1920, height: 1080 },
+        story: { scenes: {} },
+        resources: {},
+      },
+      {
+        onRenderState,
+        suppressRenderEffects: true,
+      },
+    );
+
+    expect(routeGraphicsInstance.render).not.toHaveBeenCalled();
+    expect(onRenderState).not.toHaveBeenCalled();
+
+    service.engineHandleActions({ nextLine: true });
+
+    expect(handleActions).toHaveBeenCalledWith({ nextLine: true }, undefined);
+    expect(routeGraphicsInstance.render).toHaveBeenCalledWith({
+      id: "interaction-render",
+      elements: [],
+      audio: [],
+      animations: [],
+    });
+    expect(onRenderState).toHaveBeenCalledWith({
+      renderState: {
+        id: "interaction-render",
+        elements: [],
+        audio: [],
+        animations: [],
+      },
+      systemState,
+    });
+  });
+
+  it("ignores delayed render effects from a replaced engine", async () => {
+    const effectsHandlerOptions = [];
+    const effectsHandlers = [];
+    createEffectsHandlerMock.mockImplementation((options) => {
+      effectsHandlerOptions.push(options);
+      const effectsHandler = vi.fn(() => {
+        options.getEngine().selectRenderState();
+      });
+      effectsHandlers.push(effectsHandler);
+      return effectsHandler;
+    });
+    const engineRecords = [];
+    createRouteEngineMock.mockImplementation(({ handlePendingEffects }) => {
+      const routeEngine = {
+        init: vi.fn(),
+        selectRenderState: vi.fn(() => ({
+          id: `render-${engineRecords.length + 1}`,
+          elements: [],
+          audio: [],
+          animations: [],
+        })),
+        selectPresentationState: vi.fn(() => undefined),
+        selectPresentationChanges: vi.fn(() => undefined),
+        selectSectionLineChanges: vi.fn(() => []),
+        handleActions: vi.fn(),
+      };
+      engineRecords.push({ handlePendingEffects, routeEngine });
+      return routeEngine;
+    });
+
+    const { createGraphicsService } = await import(
+      "../../src/deps/services/graphicsService.js"
+    );
+    const service = await createGraphicsService({
+      subject: {
+        dispatch: vi.fn(),
+      },
+    });
+
+    await service.init({
+      canvas: {
+        children: [],
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      },
+      width: 1920,
+      height: 1080,
+    });
+
+    const projectData = {
+      screen: { width: 1920, height: 1080 },
+      story: { scenes: {} },
+      resources: {},
+    };
+    service.initRouteEngine(projectData);
+    service.initRouteEngine(projectData);
+    routeGraphicsInstance.render.mockClear();
+
+    expect(effectsHandlerOptions[0].getEngine()).toBe(
+      engineRecords[0].routeEngine,
+    );
+    expect(() =>
+      engineRecords[0].handlePendingEffects([{ name: "render" }]),
+    ).not.toThrow();
+    expect(effectsHandlers[0]).not.toHaveBeenCalled();
+
+    effectsHandlerOptions[0].routeGraphics.render({
+      id: "stale-render",
+      elements: [],
+      audio: [],
+      animations: [],
+    });
+
+    expect(routeGraphicsInstance.render).not.toHaveBeenCalled();
+    engineRecords[1].handlePendingEffects([{ name: "render" }]);
+    expect(effectsHandlers[1]).toHaveBeenCalledWith([{ name: "render" }]);
+
+    effectsHandlerOptions[1].routeGraphics.render({
+      id: "current-render",
+      elements: [],
+      audio: [],
+      animations: [],
+    });
+
+    expect(routeGraphicsInstance.render).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "current-render" }),
+    );
+  });
+
   it("sanitizes invalid interaction sound volumes before direct renders", async () => {
     const { createGraphicsService } = await import(
       "../../src/deps/services/graphicsService.js"

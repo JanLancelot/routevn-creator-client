@@ -623,6 +623,7 @@ export const createGraphicsService = async ({
   let routeGraphicsInitPromise;
   let destroyRuntimePromise;
   let engine;
+  let engineGeneration = 0;
   let assetBufferManager;
   let loadedAssetTypes = new Map();
   let enableGlobalKeyboardBindings = true;
@@ -1535,6 +1536,7 @@ export const createGraphicsService = async ({
 
     const activeRouteGraphics = routeGraphics;
     routeGraphics = undefined;
+    engineGeneration += 1;
     engine = undefined;
     routeEngineProjectData = undefined;
     enableGlobalKeyboardBindings = true;
@@ -2202,6 +2204,8 @@ export const createGraphicsService = async ({
     hasLoadedAsset,
     initRouteEngine: (projectData, options = {}) => {
       const routeEngineTicker = ensureTicker();
+      engineGeneration += 1;
+      const currentEngineGeneration = engineGeneration;
       routeEngineProjectData = projectData;
       enableGlobalKeyboardBindings =
         options.enableGlobalKeyboardBindings ?? true;
@@ -2221,17 +2225,21 @@ export const createGraphicsService = async ({
           : (options.persistence ??
             (namespace ? undefined : createNoopRouteEnginePersistence()));
 
-      const handlePendingEffects = createEffectsHandler({
-        getEngine: () => engine,
+      let routeEngine;
+      const handleExternalEffects = createEffectsHandler({
+        getEngine: () => routeEngine,
         routeGraphics: {
           render: (renderState) => {
-            if (suppressedEngineRenderEffects > 0) {
+            if (
+              currentEngineGeneration !== engineGeneration ||
+              suppressedEngineRenderEffects > 0
+            ) {
               return;
             }
             renderEngineState(renderState);
             onRenderState?.({
               renderState,
-              systemState: engine?.selectSystemState?.(),
+              systemState: routeEngine?.selectSystemState?.(),
             });
           },
         },
@@ -2239,9 +2247,17 @@ export const createGraphicsService = async ({
         persistence,
         ticker: routeEngineTicker,
       });
-      engine = createRouteEngine({ handlePendingEffects });
+      const handlePendingEffects = (effects) => {
+        if (currentEngineGeneration !== engineGeneration) {
+          return;
+        }
+
+        return handleExternalEffects(effects);
+      };
+      routeEngine = createRouteEngine({ handlePendingEffects });
+      engine = routeEngine;
       const initEngine = () => {
-        engine.init({
+        routeEngine.init({
           initialState: {
             global: initialGlobal,
             projectData,

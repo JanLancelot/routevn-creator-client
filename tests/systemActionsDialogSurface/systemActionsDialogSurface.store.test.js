@@ -15,6 +15,8 @@ describe("systemActionsDialogSurface.store", () => {
       open: false,
       variant: "default",
       isSceneEditorLeft: false,
+      fullscreen: false,
+      fullscreenHorizontalInset: "0px",
       dialogWidth: "800",
       dialogSize: undefined,
       dialogHeight: "80vh",
@@ -76,6 +78,21 @@ describe("systemActionsDialogSurface.store", () => {
       panelWidthReduction: "64px",
       panelVerticalInset: "32px",
       panelMaxHeight: "800px",
+    });
+  });
+
+  it("covers the viewport for a fullscreen scene editor surface", () => {
+    const viewData = selectViewData({
+      state: createInitialState(),
+      props: {
+        variant: "scene-editor-left",
+        fullscreen: true,
+      },
+    });
+
+    expect(viewData).toMatchObject({
+      fullscreen: true,
+      fullscreenHorizontalInset: "0px",
     });
   });
 });

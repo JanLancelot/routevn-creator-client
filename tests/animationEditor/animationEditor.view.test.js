@@ -111,13 +111,23 @@ describe("animationEditor view", () => {
     expect(view).toContain("rtgl-text s=sm c=mu-fg ta=c: ${noSelectionLabel}");
     expect(view).not.toContain("${selectTimelineItemPrompt}");
     expect(view).toContain("rtgl-button#editSelectedKeyframeButton");
-    expect(view).toContain("handler: handleSelectedKeyframeEditClick");
-    expect(view).not.toContain("selectedKeyframeEasingSelect");
-    expect(view).not.toContain("selectedKeyframeDelay slot=keyframe-delay");
-    expect(view).not.toContain(
-      "selectedKeyframeDuration slot=keyframe-duration",
+    expect(view).toContain("rtgl-select#selectedKeyframeEasingSelect");
+    expect(view).toContain("handler: handleSelectedKeyframeEasingChange");
+    expect(view).toContain(
+      "rtgl-popover-input#selectedKeyframeDelay slot=keyframe-delay",
     );
-    expect(view).not.toContain("selectedKeyframeValue slot=keyframe-value");
+    expect(view).toContain(
+      "rtgl-popover-input#selectedKeyframeDuration slot=keyframe-duration",
+    );
+    expect(view).toContain(
+      "rtgl-slider-input#selectedKeyframeValue slot=keyframe-value",
+    );
+    expect(view).toContain(
+      "rtgl-popover-input#selectedKeyframeValuePopover slot=keyframe-value",
+    );
+    expect(view).toContain(
+      "rtgl-segmented-control#selectedKeyframeRelative slot=keyframe-value-type",
+    );
     expect(view).toContain("rtgl-input-number#selectedMaskNumberInput");
     expect(view).toContain(
       "rtgl-popover#selectedMaskNumberPopover ?open=${selectedMaskNumberPopoverIsOpen}",
@@ -143,15 +153,18 @@ describe("animationEditor view", () => {
     expect(view).toContain("rtgl-view#animationPreviewPanel");
     expect(view).toContain("rtgl-view#maskTimelineCategory");
     expect(view).toContain("rtgl-text s=sm c=mu-fg: ${maskTitle}");
-    expect(view).toContain("rtgl-view#maskTimelineRow");
+    expect(view).toContain("rtgl-view w=72 av=c ah=s pl=sm");
+    expect(view).not.toContain("rtgl-view w=72 av=c ah=c");
+    expect(view).toContain("$for maskTimelineRow, i in maskTimelineRows");
+    expect(view).toContain("rtgl-view#maskTrackRow${i}");
     expect(view).toContain(
-      "rvn-keyframe-timeline#maskTimeline editable=true side=mask",
+      "rvn-keyframe-timeline#maskKeyframeTimeline${i} editable=true side=${maskTimelineRow.side}",
     );
     expect(view).toContain(
-      ":properties=${maskTimelineProperties} :defaultValues=${maskTimelineDefaultValues}",
+      ":properties=${maskTimelineRow.properties} :defaultValues=${maskTimelineDefaultValues}",
     );
     const maskTimelineListeners = view.slice(
-      view.indexOf("  maskTimeline:"),
+      view.indexOf("  maskKeyframeTimeline*:"),
       view.indexOf("  addPropertyPopover:"),
     );
     expect(maskTimelineListeners).toContain(
@@ -160,9 +173,13 @@ describe("animationEditor view", () => {
     expect(maskTimelineListeners).not.toContain(
       "handler: handleInitialValueClick",
     );
+    expect(view).not.toContain("rtgl-view#maskTimelineRow${i}");
     expect(view).toContain("handler: handleMaskTimelineRowClick");
     expect(view).toContain("handler: handleMaskTimelineRowKeyDown");
     expect(view).toContain("$elif selectedMask");
+    expect(view).toContain(
+      "rtgl-button#editSelectedKeyframeButton sq v=gh pre=edit",
+    );
     expect(view).toContain("rtgl-view#selectedMaskDetails");
     expect(view).toContain("rtgl-view#selectedMaskSoftness");
     expect(view).toContain("handler: handleSelectedMaskSoftnessClick");

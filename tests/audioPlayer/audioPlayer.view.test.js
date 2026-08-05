@@ -47,12 +47,12 @@ describe("audio player view", () => {
       'rtgl-view d=h av=c w=f h=1fg p=md g=md style="min-width: 0; min-height: 0; box-sizing: border-box;"',
     );
     expect(audioPlayerView).toContain(
-      'rtgl-view ph=md d=h av=c w=f h=1fg p=md style="min-height: 0;"',
+      'rtgl-view ph=md d=h av=c w=f h=1fg p=md pos=rel style="min-width: 0; min-height: 0;"',
     );
     expect(audioPlayerView).not.toContain("rtgl-view w=f g=md bgc=mu");
   });
 
-  it("keeps desktop playback controls centered after the title", () => {
+  it("centers the desktop play button without overlapping narrow titles", () => {
     const audioPlayerView = readFileSync(
       new URL(
         "../../src/components/audioPlayer/audioPlayer.view.yaml",
@@ -68,11 +68,24 @@ describe("audio player view", () => {
     const desktopBranch = audioPlayerView.slice(desktopBranchStart);
 
     expect(desktopBranchStart).toBeGreaterThan(-1);
-    expect(desktopBranch).toContain("rtgl-text w=250 ellipsis=true");
-    expect(desktopBranch).toContain("rtgl-view d=h av=c g=lg w=1fg ah=c");
-    expect(desktopBranch).toContain("rtgl-view#playPauseBtn cur=pointer");
+    expect(desktopBranch).toContain(
+      'rtgl-view w=1fg style="min-width: 0; padding-right: 32px; box-sizing: border-box;"',
+    );
+    expect(desktopBranch).toContain(
+      'rtgl-text w=f ellipsis=true style="min-width: 0;"',
+    );
+    expect(desktopBranch).toContain(
+      'rtgl-view#playPauseBtn pos=abs cur=pointer style="left: 50%; top: 50%; transform: translate(-50%, -50%);"',
+    );
+    expect(desktopBranch).toContain(
+      'rtgl-view d=h av=c g=lg w=1fg ah=e style="min-width: 0; padding-left: 32px; box-sizing: border-box;"',
+    );
+    expect(desktopBranch).not.toContain("rtgl-text w=250 ellipsis=true");
     expect(desktopBranch).toContain(
       "rtgl-view#playerCloser w=24 h=24 av=c ah=c cur=pointer",
+    );
+    expect(desktopBranch.indexOf("${title}")).toBeLessThan(
+      desktopBranch.indexOf("rtgl-view#playPauseBtn"),
     );
     expect(desktopBranch.indexOf("rtgl-view#playPauseBtn")).toBeLessThan(
       desktopBranch.indexOf("${currentTimeFormatted}"),

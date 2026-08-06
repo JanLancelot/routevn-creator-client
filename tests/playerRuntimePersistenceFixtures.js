@@ -33,6 +33,18 @@ export const createSaveSlot = (
           menuPage: "",
           menuEntryPoint: "",
         },
+        dialogueHistory: {
+          entries: [
+            { sectionId: "section-1", lineId: "line-1" },
+            {
+              sectionId: "section-1",
+              lineId,
+              appendToPrevious: true,
+            },
+          ],
+          currentLength: 2,
+          checkpointLengths: [1, 2],
+        },
         rollback: {
           currentIndex: 1,
           isRestoring: false,
@@ -42,6 +54,7 @@ export const createSaveSlot = (
               sectionId: "section-1",
               lineId: "line-1",
               rollbackPolicy: "free",
+              returnable: false,
             },
             {
               sectionId: "section-1",
@@ -51,6 +64,21 @@ export const createSaveSlot = (
                 {
                   type: "pushOverlay",
                   payload: { resourceId: "menu", optional: null },
+                },
+              ],
+              randomOutcomeVersion: 1,
+              randomOutcomes: [
+                {
+                  path: "random",
+                  ordinal: 0,
+                  type: "integer",
+                  result: { type: "integer", value: 2 },
+                },
+                {
+                  path: "conditional.branches.0.actions.random",
+                  ordinal: 0,
+                  type: "weighted",
+                  result: { type: "weighted", outcomeIndex: 1 },
                 },
               ],
             },

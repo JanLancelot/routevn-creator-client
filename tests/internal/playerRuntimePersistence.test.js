@@ -100,6 +100,37 @@ describe("player runtime persistence key/value contract", () => {
     );
   });
 
+  it("accepts optional engine dialogue history and checkpoint-less entries", () => {
+    const slot = createSaveSlot(1);
+    slot.state.contexts[0].dialogueHistory.entries.push({
+      sectionId: "section-2",
+      lineId: "jump-target",
+    });
+    slot.state.contexts[0].dialogueHistory.currentLength = 3;
+
+    expect(() => snapshotSaveSlots({ 1: slot })).not.toThrow();
+
+    const legacySlot = createSaveSlot(2);
+    delete legacySlot.state.contexts[0].dialogueHistory;
+    expect(() => snapshotSaveSlots({ 2: legacySlot })).not.toThrow();
+  });
+
+  it("accepts complete engine rollback checkpoint metadata", () => {
+    const slot = createSaveSlot(1);
+
+    const snapshot = snapshotSaveSlots({ 1: slot });
+
+    expect(snapshot["1"].state.contexts[0].rollback.timeline).toEqual(
+      slot.state.contexts[0].rollback.timeline,
+    );
+    expect(
+      snapshot["1"].state.contexts[0].rollback.timeline[0].returnable,
+    ).toBe(false);
+    expect(
+      snapshot["1"].state.contexts[0].rollback.timeline[1].randomOutcomes,
+    ).toHaveLength(2);
+  });
+
   it("rejects unsupported or empty physical keys", () => {
     expect(() => validatePlayerPersistenceValue("saveSlots", {})).toThrow(
       "Unsupported runtime persistence key: saveSlots",
@@ -341,6 +372,78 @@ describe("player runtime persistence key/value contract", () => {
         message: ".saveLoadPagination must be at least 1",
       },
       {
+        name: "dialogue history object",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory = [];
+        },
+        message: ".dialogueHistory must be a JSON object",
+      },
+      {
+        name: "closed dialogue history",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.unknown = true;
+        },
+        message: ".dialogueHistory.unknown is not supported",
+      },
+      {
+        name: "dialogue history entries",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.entries = {};
+        },
+        message: ".dialogueHistory.entries must be a JSON array",
+      },
+      {
+        name: "dialogue history entry fields",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.entries[0].extra = true;
+        },
+        message: ".dialogueHistory.entries[0].extra is not supported",
+      },
+      {
+        name: "dialogue history entry ids",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.entries[0].sectionId = "";
+        },
+        message: ".sectionId must be a non-empty JSON string",
+      },
+      {
+        name: "dialogue history append flag",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.entries[1].appendToPrevious =
+            "true";
+        },
+        message: ".appendToPrevious must be a JSON boolean",
+      },
+      {
+        name: "dialogue history current length",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.currentLength = 3;
+        },
+        message: ".currentLength must be between 0",
+      },
+      {
+        name: "dialogue history checkpoint count",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.checkpointLengths = [1];
+        },
+        message:
+          ".checkpointLengths must contain one entry per rollback checkpoint",
+      },
+      {
+        name: "dialogue history checkpoint length",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.checkpointLengths[1] = 3;
+        },
+        message: ".checkpointLengths[1] must be between 0",
+      },
+      {
+        name: "dialogue history checkpoint chronology",
+        mutate: (slot) => {
+          slot.state.contexts[0].dialogueHistory.checkpointLengths = [2, 1];
+        },
+        message: ".checkpointLengths must be chronological",
+      },
+      {
         name: "rollback timeline",
         mutate: (slot) => {
           slot.state.contexts[0].rollback.timeline = [];
@@ -381,6 +484,120 @@ describe("player runtime persistence key/value contract", () => {
           slot.state.contexts[0].rollback.timeline[0].unknown = true;
         },
         message: ".unknown is not supported",
+      },
+      {
+        name: "checkpoint returnability",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[0].returnable = "false";
+        },
+        message: ".returnable must be a JSON boolean",
+      },
+      {
+        name: "random outcome version",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomeVersion = 2;
+        },
+        message: ".randomOutcomeVersion must be 1",
+      },
+      {
+        name: "versioned random outcome dependency",
+        mutate: (slot) => {
+          delete slot.state.contexts[0].rollback.timeline[1].randomOutcomes;
+        },
+        message: ".randomOutcomes is required",
+      },
+      {
+        name: "unversioned random outcome dependency",
+        mutate: (slot) => {
+          delete slot.state.contexts[0].rollback.timeline[1]
+            .randomOutcomeVersion;
+        },
+        message: ".randomOutcomeVersion is required",
+      },
+      {
+        name: "random outcome collection",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes = {};
+        },
+        message: ".randomOutcomes must be a JSON array",
+      },
+      {
+        name: "closed random outcome",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].extra = true;
+        },
+        message: ".randomOutcomes[0].extra is not supported",
+      },
+      {
+        name: "random outcome path",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].path =
+            "";
+        },
+        message: ".path must be a non-empty JSON string",
+      },
+      {
+        name: "random outcome ordinal",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].ordinal =
+            -1;
+        },
+        message: ".ordinal must not be negative",
+      },
+      {
+        name: "duplicate random outcome identity",
+        mutate: (slot) => {
+          const outcomes =
+            slot.state.contexts[0].rollback.timeline[1].randomOutcomes;
+          outcomes.push(cloneFixture(outcomes[0]));
+        },
+        message: "duplicates random outcome random#0",
+      },
+      {
+        name: "random outcome type",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].type =
+            "decimal";
+        },
+        message: '.type must be "integer" or "weighted"',
+      },
+      {
+        name: "random outcome result",
+        mutate: (slot) => {
+          delete slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0]
+            .result;
+        },
+        message: ".result is required",
+      },
+      {
+        name: "random outcome result type",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].result.type =
+            "weighted";
+        },
+        message: ".result.type must match the random outcome type",
+      },
+      {
+        name: "closed random outcome result",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].result.extra = true;
+        },
+        message: ".result.extra is not supported",
+      },
+      {
+        name: "integer random outcome value",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[0].result.value =
+            Number.MAX_SAFE_INTEGER + 1;
+        },
+        message: ".result.value must be a JavaScript-safe JSON integer",
+      },
+      {
+        name: "weighted random outcome index",
+        mutate: (slot) => {
+          slot.state.contexts[0].rollback.timeline[1].randomOutcomes[1].result.outcomeIndex = 1_000;
+        },
+        message: ".result.outcomeIndex must be between 0 and 999",
       },
       {
         name: "executed action type",

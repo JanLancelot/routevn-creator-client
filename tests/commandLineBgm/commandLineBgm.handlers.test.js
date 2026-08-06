@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   handleButtonSelectClick,
   handleChannelClick,
+  handleChannelContextMenu,
   handleEdgeAddClick,
   handleEmptyAddClick,
   handleFormChange,
@@ -51,6 +52,11 @@ const i18n = {
 };
 
 const contextMenuItems = [
+  {
+    type: "item",
+    label: "Replace Audio",
+    key: "replace",
+  },
   {
     type: "item",
     label: "Insert Sound Before",
@@ -132,22 +138,28 @@ describe("commandLineBgm.handlers", () => {
     expect(render).toHaveBeenCalledOnce();
   });
 
-  it("selects the whole channel from the channel header", () => {
+  it("opens the channel editor from the channel", () => {
     const state = createState();
     const store = createStore(state);
     const render = vi.fn();
     store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
 
     const stopPropagation = vi.fn();
-    handleChannelClick({ store, render }, { _event: { stopPropagation } });
+    const blurActiveElement = vi.fn();
+    handleChannelClick(
+      { store, render, appService: { blurActiveElement } },
+      { _event: { stopPropagation } },
+    );
 
-    expect(state.channelSelected).toBe(true);
+    expect(state.isChannelEditorOpen).toBe(true);
+    expect(state.channelSelected).toBe(false);
     expect(state.selectedSoundId).toBeUndefined();
     expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(blurActiveElement).toHaveBeenCalledOnce();
     expect(render).toHaveBeenCalledOnce();
   });
 
-  it("ignores a channel click synthesized from a replaced drag surface", () => {
+  it("opens the channel editor when a channel descendant is clicked", () => {
     const state = createState();
     const store = createStore(state);
     const render = vi.fn();
@@ -155,9 +167,10 @@ describe("commandLineBgm.handlers", () => {
     const channel = {
       classList: { contains: vi.fn(() => true) },
     };
+    const blurActiveElement = vi.fn();
 
     handleChannelClick(
-      { store, render },
+      { store, render, appService: { blurActiveElement } },
       {
         _event: {
           currentTarget: channel,
@@ -167,8 +180,58 @@ describe("commandLineBgm.handlers", () => {
       },
     );
 
-    expect(state.selectedSoundId).toBe("intro-clip");
-    expect(render).not.toHaveBeenCalled();
+    expect(state.isChannelEditorOpen).toBe(true);
+    expect(state.selectedSoundId).toBeUndefined();
+    expect(blurActiveElement).toHaveBeenCalledOnce();
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("clears BGM from the channel context menu without leaving the page", async () => {
+    const state = createState();
+    const store = createStore(state);
+    const render = vi.fn();
+    store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
+    store.updateChannel({ values: { interruption: "loopEnd", volume: 40 } });
+    const showDropdownMenu = vi.fn().mockResolvedValue({
+      item: { key: "delete" },
+    });
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    await handleChannelContextMenu(
+      {
+        appService: { showDropdownMenu },
+        store,
+        render,
+        i18n,
+      },
+      {
+        _event: {
+          clientX: 120,
+          clientY: 240,
+          preventDefault,
+          stopPropagation,
+        },
+      },
+    );
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(showDropdownMenu).toHaveBeenCalledWith({
+      items: [{ type: "item", label: "Delete", key: "delete" }],
+      x: 120,
+      y: 240,
+      place: "bs",
+    });
+    expect(store.selectBgm()).toEqual({
+      interruption: "immediate",
+      loop: true,
+      volume: 75,
+      sounds: [],
+    });
+    expect(state.mode).toBe("current");
+    expect(state.isChannelEditorOpen).toBe(false);
+    expect(render).toHaveBeenCalledOnce();
   });
 
   it("keeps the sound selected when a post-drag click targets the channel", () => {
@@ -293,6 +356,57 @@ describe("commandLineBgm.handlers", () => {
     expect(render).toHaveBeenCalledTimes(2);
   });
 
+  it("replaces only the audio resource for an individual clip", async () => {
+    const state = createState();
+    const store = createStore(state);
+    const render = vi.fn();
+    store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
+    store.updateSound({
+      soundId: "intro-clip",
+      values: { startDelayMs: 750, loop: true, volume: 35 },
+    });
+    const showDropdownMenu = vi.fn().mockResolvedValue({
+      item: { key: "replace" },
+    });
+
+    await handleSoundContextMenu(
+      {
+        store,
+        render,
+        appService: { showDropdownMenu },
+        i18n,
+      },
+      {
+        _event: {
+          currentTarget: { dataset: { soundId: "intro-clip" } },
+          clientX: 120,
+          clientY: 240,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        },
+      },
+    );
+
+    expect(state.mode).toBe("gallery");
+    expect(state.pendingReplacementSoundId).toBe("intro-clip");
+
+    store.setTempSelectedResource({ resourceId: "theme" });
+    handleButtonSelectClick({ store, render });
+
+    expect(state.mode).toBe("current");
+    expect(state.bgm.sounds).toEqual([
+      {
+        id: "intro-clip",
+        resourceId: "theme",
+        startDelayMs: 750,
+        loop: true,
+        volume: 35,
+      },
+    ]);
+    expect(state.selectedSoundId).toBe("intro-clip");
+    expect(state.pendingReplacementSoundId).toBeUndefined();
+  });
+
   it.each([
     ["before", "insert-before", 1],
     ["after", "insert-after", 2],
@@ -359,7 +473,7 @@ describe("commandLineBgm.handlers", () => {
       {
         store,
         render,
-        refs: { form: { setValues } },
+        refs: { soundForm: { setValues } },
         appService: { showDropdownMenu },
         i18n,
       },

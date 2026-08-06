@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import * as bgmStore from "../../src/components/commandLineBgm/commandLineBgm.store.js";
 import {
   clearSelectedSound,
+  closeChannelEditor,
   connectSoundToPrevious,
   createInitialState,
   insertSound,
+  openChannelEditor,
   removeSound,
   selectBgm,
   selectSelectedSoundId,
@@ -81,8 +83,8 @@ describe("commandLineBgm.store", () => {
       sounds: [],
     });
     expect(viewData.hasSelection).toBe(false);
+    expect(viewData.showChannelControls).toBe(false);
     expect(viewData.channelBorderColor).toBe("bo");
-    expect(viewData.channelHoverBorderColor).toBe("ac");
     expect(viewData.selectionHeading).toBe("");
     expect(viewData.selectionName).toBe("");
     expect(viewData.channelLabel).toBe("BGM Channel");
@@ -92,17 +94,76 @@ describe("commandLineBgm.store", () => {
     const selectedViewData = selectViewData({ state, i18n });
     expect(selectedViewData.hasSelection).toBe(true);
     expect(selectedViewData.channelBorderColor).toBe("pr");
-    expect(selectedViewData.channelHoverBorderColor).toBe("pr");
     expect(selectedViewData.selectionHeading).toBe("Channel");
     expect(selectedViewData.selectionName).toBe("BGM Channel");
-    expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
-      "interruption",
-      "volume",
+    expect(selectedViewData.form.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "interruption", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
     ]);
     expect(selectedViewData.defaultValues).toEqual({
       interruption: "immediate",
       volume: 75,
     });
+    expect(selectedViewData.channelForm.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "interruption", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
+    ]);
+    expect(selectedViewData.editChannelLabel).toBe("Edit Channel");
+  });
+
+  it("edits sounds in the channel editor without submitting the draft", () => {
+    const state = createInitialState();
+    setBgm(
+      { state },
+      {
+        bgm: {
+          sounds: [{ id: "intro-clip", resourceId: "intro" }],
+        },
+      },
+    );
+
+    openChannelEditor({ state });
+    expect(selectViewData({ state, i18n })).toMatchObject({
+      isChannelEditorOpen: true,
+      hasSoundSelection: false,
+    });
+
+    setSelectedSound({ state }, { soundId: "intro-clip" });
+    updateSound({ state }, { soundId: "intro-clip", values: { volume: 35 } });
+    const editorViewData = selectViewData({ state, i18n });
+    expect(editorViewData.hasSoundSelection).toBe(true);
+    expect(editorViewData.showChannelControls).toBe(true);
+    expect(editorViewData.form.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "startDelayMs", type: "input-duration" },
+          { type: "slot", slot: "startDelaySpacer" },
+        ],
+      },
+      {
+        type: "row",
+        fields: [
+          { name: "loop", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
+    ]);
+
+    closeChannelEditor({ state });
+    expect(selectViewData({ state, i18n }).isChannelEditorOpen).toBe(false);
+    expect(selectBgm({ state }).sounds[0].volume).toBe(35);
+    expect(selectSelectedSoundId({ state })).toBeUndefined();
   });
 
   it("migrates legacy single-sound BGM without losing its start delay", () => {
@@ -208,12 +269,7 @@ describe("commandLineBgm.store", () => {
     const selectedViewData = selectViewData({ state, i18n });
     expect(selectedViewData.selectionHeading).toBe("Audio");
     expect(selectedViewData.selectionName).toBe("Intro");
-    expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
-      "startDelayMs",
-      "loop",
-      "volume",
-    ]);
-    expect(selectedViewData.form.fields[0]).toMatchObject({
+    expect(selectedViewData.form.fields[0].fields[0]).toMatchObject({
       name: "startDelayMs",
       label: "Start Delay",
       type: "input-duration",

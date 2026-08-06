@@ -18,6 +18,7 @@ import {
 } from "../../internal/ui/sceneEditor/commandLineCopy.js";
 
 const DEFAULT_CHANNEL_VOLUME = 75;
+const DEFAULT_CHANNEL_APPLY_MODE = "singleLine";
 const DEFAULT_SOUND_VOLUME = 100;
 const DEFAULT_LEGACY_SOUND_VOLUME = 75;
 const LEGACY_CHANNEL_ID = "default";
@@ -31,6 +32,9 @@ const normalizeVolume = (volume, fallback) => {
   const nextVolume = parsedVolume > 100 ? parsedVolume / 10 : parsedVolume;
   return Math.max(0, Math.min(100, Math.round(nextVolume)));
 };
+
+const normalizeChannelApplyMode = (applyMode) =>
+  applyMode === "persistent" ? "persistent" : DEFAULT_CHANNEL_APPLY_MODE;
 
 const normalizeSounds = (
   sounds = [],
@@ -73,7 +77,9 @@ const normalizeChannel = (
 ) => {
   const normalizedChannel = {
     id: String(channel.id ?? "").trim(),
+    applyMode: normalizeChannelApplyMode(channel.applyMode),
     interruption: normalizeAudioChannelInterruption(channel.interruption),
+    loop: channel.loop ?? false,
     volume: normalizeVolume(channel.volume, defaultChannelVolume),
     sounds: normalizeSounds(channel.sounds, {
       defaultVolume: defaultSoundVolume,
@@ -83,6 +89,11 @@ const normalizeChannel = (
     if (channel[field] !== undefined) {
       normalizedChannel[field] = channel[field];
     }
+  }
+  if (normalizedChannel.loop) {
+    normalizedChannel.sounds.forEach((sound) => {
+      sound.loop = false;
+    });
   }
   sortAudioSoundsByStartDelay(normalizedChannel.sounds);
   return normalizedChannel;
@@ -127,21 +138,49 @@ const normalizeSfxChannels = (sfx = {}) => {
 const CHANNEL_FORM = {
   fields: [
     {
-      name: "interruption",
-      description: "Interruption",
-      type: "segmented-control",
-      options: [
-        { value: "immediate", label: "Immediate" },
-        { value: "loopEnd", label: "Loop End" },
+      type: "row",
+      fields: [
+        {
+          name: "loop",
+          description: "Loop",
+          type: "segmented-control",
+          options: [
+            { value: false, label: "Don't Loop" },
+            { value: true, label: "Loop" },
+          ],
+        },
+        {
+          name: "applyMode",
+          description: "Apply Mode",
+          type: "segmented-control",
+          options: [
+            { value: "singleLine", label: "Single Line" },
+            { value: "persistent", label: "Persistent" },
+          ],
+        },
       ],
     },
     {
-      name: "volume",
-      description: "Volume",
-      type: "slider-with-input",
-      min: 0,
-      max: 100,
-      step: 1,
+      type: "row",
+      fields: [
+        {
+          name: "interruption",
+          description: "Interruption",
+          type: "segmented-control",
+          options: [
+            { value: "immediate", label: "Immediate" },
+            { value: "loopEnd", label: "Loop End" },
+          ],
+        },
+        {
+          name: "volume",
+          description: "Volume",
+          type: "slider-with-input",
+          min: 0,
+          max: 100,
+          step: 1,
+        },
+      ],
     },
   ],
 };
@@ -149,28 +188,42 @@ const CHANNEL_FORM = {
 const SOUND_FORM = {
   fields: [
     {
-      name: "startDelayMs",
-      label: "Start Delay",
-      type: "input-duration",
-      min: 0,
-      step: 10,
-    },
-    {
-      name: "loop",
-      description: "Loop",
-      type: "segmented-control",
-      options: [
-        { value: true, label: "Loop" },
-        { value: false, label: "Don't Loop" },
+      type: "row",
+      fields: [
+        {
+          name: "startDelayMs",
+          label: "Start Delay",
+          type: "input-duration",
+          min: 0,
+          step: 10,
+        },
+        {
+          type: "slot",
+          slot: "startDelaySpacer",
+        },
       ],
     },
     {
-      name: "volume",
-      description: "Volume",
-      type: "slider-with-input",
-      min: 0,
-      max: 100,
-      step: 1,
+      type: "row",
+      fields: [
+        {
+          name: "loop",
+          description: "Loop",
+          type: "segmented-control",
+          options: [
+            { value: false, label: "Don't Loop" },
+            { value: true, label: "Loop" },
+          ],
+        },
+        {
+          name: "volume",
+          description: "Volume",
+          type: "slider-with-input",
+          min: 0,
+          max: 100,
+          step: 1,
+        },
+      ],
     },
   ],
 };
@@ -201,12 +254,15 @@ export const createInitialState = () => ({
   mode: "current",
   items: { items: {}, tree: [] },
   channels: [],
+  initialPersistentChannelIds: [],
   selectedChannelId: undefined,
+  editingChannelId: undefined,
   selectedSoundId: undefined,
   soundDrag: undefined,
   suppressChannelClickUntil: 0,
   pendingChannelId: undefined,
   pendingInsertIndex: 0,
+  pendingReplacementSoundId: undefined,
   tempSelectedResourceId: undefined,
   searchQuery: "",
   addChannelPopover: {
@@ -223,13 +279,26 @@ export const createInitialState = () => ({
 
 export const selectChannels = ({ state }) => state.channels;
 
-export const selectSfx = ({ state }) => ({ channels: state.channels });
+export const selectSfx = ({ state }) => {
+  const channels = [...state.channels];
+  const channelIds = new Set(channels.map((channel) => channel.id));
+
+  for (const channelId of state.initialPersistentChannelIds) {
+    if (!channelIds.has(channelId)) {
+      channels.push({ id: channelId, sounds: [] });
+    }
+  }
+
+  return { channels };
+};
 
 export const selectSelectedChannelId = ({ state }) => {
   return state.selectedChannelId;
 };
 
 export const selectSelectedSoundId = ({ state }) => state.selectedSoundId;
+
+export const selectEditingChannelId = ({ state }) => state.editingChannelId;
 
 export const selectSoundDrag = ({ state }) => state.soundDrag;
 
@@ -247,6 +316,10 @@ export const selectPendingChannelId = ({ state }) => state.pendingChannelId;
 
 export const selectPendingInsertIndex = ({ state }) => {
   return state.pendingInsertIndex;
+};
+
+export const selectPendingReplacementSoundId = ({ state }) => {
+  return state.pendingReplacementSoundId;
 };
 
 export const selectTempSelectedResourceId = ({ state }) => {
@@ -365,12 +438,13 @@ export const selectViewData = ({ state, i18n }) => {
     const timeline = timelines[channelIndex];
     const channelSelected =
       channel.id === state.selectedChannelId &&
+      state.editingChannelId === undefined &&
       state.selectedSoundId === undefined;
     const sounds = timeline.sounds.map((timelineSound) => {
       const { sound, durationMs } = timelineSound;
       const resource = soundResourceById.get(sound.resourceId);
       const isSelected =
-        channel.id === state.selectedChannelId &&
+        channel.id === state.editingChannelId &&
         sound.id === state.selectedSoundId;
 
       return {
@@ -392,41 +466,48 @@ export const selectViewData = ({ state, i18n }) => {
     return {
       ...channel,
       channelIndex,
+      channelFormKey: `channel-${channel.id}-${channel.loop}`,
       sounds,
+      showControls: sounds.length > 0,
+      channelDefaultValues: {
+        applyMode: channel.applyMode,
+        interruption: channel.interruption,
+        loop: channel.loop,
+        volume: channel.volume,
+      },
       channelBorderColor: channelSelected ? "pr" : "bo",
       channelHoverBorderColor: channelSelected ? "pr" : "ac",
       durationLabel: formatAudioDurationMs(timeline.channelDurationMs),
       timelineDurationMs: timeline.timelineDurationMs,
       timelineHeightPx: timeline.timelineHeightPx,
-      channelHeightPx: timeline.timelineHeightPx + 24,
+      channelHeightPx: timeline.timelineHeightPx + 32,
     };
   });
 
   const selectedChannel = channels.find(
     (channel) => channel.id === state.selectedChannelId,
   );
-  const selectedSound = selectedChannel?.sounds.find(
+  const editorChannel = channels.find(
+    (channel) => channel.id === state.editingChannelId,
+  );
+  const selectedSound = editorChannel?.sounds.find(
     (sound) => sound.id === state.selectedSoundId,
   );
   const hasSelection = selectedChannel !== undefined;
-  const form = selectedSound ? SOUND_FORM : CHANNEL_FORM;
-  const defaultValues = selectedSound
-    ? {
-        startDelayMs: selectedSound.startDelayMs,
-        loop: selectedSound.loop,
-        volume: selectedSound.volume,
-      }
-    : {
-        interruption:
-          selectedChannel?.interruption ?? normalizeAudioChannelInterruption(),
-        volume: selectedChannel?.volume ?? DEFAULT_CHANNEL_VOLUME,
-      };
+  const defaultValues = {
+    startDelayMs: selectedSound?.startDelayMs,
+    loop: selectedSound?.loop,
+    volume: selectedSound?.volume,
+  };
 
   return {
     mode: state.mode,
     items: folderItems,
     groups,
     channels,
+    editorChannel,
+    isChannelEditorOpen: editorChannel !== undefined,
+    hasSoundSelection: selectedSound !== undefined,
     hasSelection,
     selectionHeading: hasSelection
       ? localizeCommandLineText(selectedSound ? "Audio" : "Channel", copy)
@@ -435,8 +516,12 @@ export const selectViewData = ({ state, i18n }) => {
     selectionKey: selectedSound
       ? `sound-${selectedChannel.id}-${selectedSound.id}`
       : `channel-${selectedChannel?.id ?? "none"}`,
-    form: localizeCommandLineForm(form, copy),
+    form: localizeCommandLineForm(SOUND_FORM, copy),
     defaultValues,
+    channelForm: localizeCommandLineForm(CHANNEL_FORM, copy),
+    channelEditorTitle: editorChannel?.id ?? "",
+    confirmButtonLabel: localizeCommandLineText("Confirm", copy),
+    editChannelLabel: localizeCommandLineText("Edit Channel", copy),
     addChannelPopover: state.addChannelPopover,
     addChannelForm: localizeCommandLineForm(ADD_CHANNEL_FORM, copy),
     addChannelDefaultValues: { name: "" },
@@ -468,8 +553,14 @@ export const setRepositoryState = ({ state }, { sounds } = {}) => {
 
 export const setSfx = ({ state }, { sfx } = {}) => {
   state.channels = normalizeSfxChannels(sfx);
+  state.initialPersistentChannelIds = state.channels
+    .filter((channel) => channel.applyMode === "persistent")
+    .map((channel) => channel.id);
   state.selectedChannelId = undefined;
+  state.editingChannelId = undefined;
   state.selectedSoundId = undefined;
+  state.pendingChannelId = undefined;
+  state.pendingReplacementSoundId = undefined;
 };
 
 export const addChannel = ({ state }, { id } = {}) => {
@@ -503,6 +594,9 @@ export const removeChannel = ({ state }, { channelId } = {}) => {
     state.selectedChannelId = state.channels[nextSelectedIndex]?.id;
     state.selectedSoundId = undefined;
   }
+  if (state.editingChannelId === channelId) {
+    state.editingChannelId = undefined;
+  }
 };
 
 export const moveChannel = ({ state }, { channelId, direction } = {}) => {
@@ -532,6 +626,29 @@ export const setSelectedSound = ({ state }, { channelId, soundId } = {}) => {
   state.selectedSoundId = soundId;
 };
 
+export const openChannelEditor = ({ state }, { channelId } = {}) => {
+  if (!state.channels.some((channel) => channel.id === channelId)) {
+    return;
+  }
+
+  state.mode = "current";
+  state.selectedChannelId = channelId;
+  state.editingChannelId = channelId;
+  state.selectedSoundId = undefined;
+  state.addChannelPopover.isOpen = false;
+};
+
+export const closeChannelEditor = ({ state }, _payload = {}) => {
+  state.mode = "current";
+  state.editingChannelId = undefined;
+  state.selectedSoundId = undefined;
+  state.soundDrag = undefined;
+  state.pendingChannelId = undefined;
+  state.tempSelectedResourceId = undefined;
+  state.pendingReplacementSoundId = undefined;
+  closeAudioPlayer({ state });
+};
+
 export const updateChannel = ({ state }, { channelId, values = {} } = {}) => {
   const channel = state.channels.find((item) => item.id === channelId);
   if (!channel) {
@@ -542,6 +659,17 @@ export const updateChannel = ({ state }, { channelId, values = {} } = {}) => {
     channel.interruption = normalizeAudioChannelInterruption(
       values.interruption,
     );
+  }
+  if (values.applyMode !== undefined) {
+    channel.applyMode = normalizeChannelApplyMode(values.applyMode);
+  }
+  if (values.loop !== undefined) {
+    channel.loop = values.loop;
+    if (values.loop) {
+      channel.sounds.forEach((sound) => {
+        sound.loop = false;
+      });
+    }
   }
   if (values.volume !== undefined) {
     channel.volume = normalizeVolume(values.volume, DEFAULT_CHANNEL_VOLUME);
@@ -561,6 +689,10 @@ export const updateSound = (
 
   if (values.loop !== undefined) {
     sound.loop = values.loop;
+    if (values.loop) {
+      const channel = state.channels.find((item) => item.id === channelId);
+      channel.loop = false;
+    }
   }
   if (values.volume !== undefined) {
     sound.volume = normalizeVolume(values.volume, DEFAULT_SOUND_VOLUME);
@@ -726,9 +858,35 @@ export const removeSound = ({ state }, { channelId, soundId } = {}) => {
   state.selectedSoundId = undefined;
 };
 
+export const replaceSoundResource = (
+  { state },
+  { channelId, soundId, resourceId } = {},
+) => {
+  const channel = state.channels.find((item) => item.id === channelId);
+  const sound = channel?.sounds.find((item) => item.id === soundId);
+  if (!sound) {
+    return;
+  }
+
+  sound.resourceId = resourceId;
+  state.selectedChannelId = channel.id;
+  state.selectedSoundId = sound.id;
+  state.tempSelectedResourceId = undefined;
+  state.pendingReplacementSoundId = undefined;
+  closeAudioPlayer({ state });
+};
+
 export const setPendingInsertion = ({ state }, { channelId, index } = {}) => {
   state.pendingChannelId = channelId;
   state.pendingInsertIndex = index;
+};
+
+export const setPendingReplacement = (
+  { state },
+  { channelId, soundId } = {},
+) => {
+  state.pendingChannelId = channelId;
+  state.pendingReplacementSoundId = soundId;
 };
 
 export const setTempSelectedResource = ({ state }, { resourceId } = {}) => {

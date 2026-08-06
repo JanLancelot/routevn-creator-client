@@ -661,12 +661,26 @@ export const selectActionsData = ({ props, state, copy }) => {
     preview.layout = layoutsItems[presentationState.layout.resourceId];
   }
 
-  if (presentationState.bgm) {
-    actionsObject.bgm = presentationState.bgm;
+  const authoredBgm = isPlainObject(actions.bgm) ? actions.bgm : undefined;
+  const effectiveBgm = isPlainObject(presentationState.bgm)
+    ? presentationState.bgm
+    : undefined;
+  const authoredBgmStops =
+    authoredBgm &&
+    (Object.keys(authoredBgm).length === 0 ||
+      (Array.isArray(authoredBgm.sounds) && authoredBgm.sounds.length === 0));
+  const bgmAction = authoredBgmStops
+    ? authoredBgm
+    : (effectiveBgm ?? authoredBgm);
+  if (bgmAction) {
+    actionsObject.bgm = bgmAction;
     const bgmResourceId =
-      presentationState.bgm.sounds?.[0]?.resourceId ??
-      presentationState.bgm.resourceId;
-    preview.bgm = sounds[bgmResourceId];
+      bgmAction.sounds?.[0]?.resourceId ?? bgmAction.resourceId;
+    preview.bgm = sounds[bgmResourceId] ?? {
+      name: authoredBgmStops
+        ? localizeCommandLineText("Stop BGM", copy)
+        : (bgmResourceId ?? localizeCommandLineText("BGM", copy)),
+    };
   }
 
   const voiceAction = isPlainObject(actions.voice)
@@ -692,22 +706,33 @@ export const selectActionsData = ({ props, state, copy }) => {
   }
 
   // Sound Effects
-  if (actions.sfx?.items || actions.sfx?.channels) {
-    const soundEffects = Array.isArray(actions.sfx.channels)
-      ? actions.sfx.channels.flatMap((channel) => channel.sounds ?? [])
-      : actions.sfx.items;
+  const authoredSfx = isPlainObject(actions.sfx) ? actions.sfx : undefined;
+  const effectiveSfx = isPlainObject(presentationState.sfx)
+    ? presentationState.sfx
+    : undefined;
+  const authoredSfxStopsAll =
+    (Array.isArray(authoredSfx?.channels) &&
+      authoredSfx.channels.length === 0) ||
+    (Array.isArray(authoredSfx?.items) && authoredSfx.items.length === 0);
+  const sfxAction = authoredSfxStopsAll
+    ? authoredSfx
+    : (effectiveSfx ?? authoredSfx);
+  if (Array.isArray(sfxAction?.items) || Array.isArray(sfxAction?.channels)) {
+    const soundEffects = Array.isArray(sfxAction.channels)
+      ? sfxAction.channels.flatMap((channel) => channel.sounds ?? [])
+      : sfxAction.items;
     const soundEffectsData = soundEffects.map((sfx) => ({
       ...sfx,
       sound: sounds[sfx.resourceId],
     }));
     const names = soundEffectsData
-      .map((sfx) => sfx.sound?.name || "")
+      .map((sfx) => sfx.sound?.name ?? sfx.resourceId ?? "")
       .filter((name) => name !== "")
       .join(", ");
 
-    actionsObject.sfx = actions.sfx;
+    actionsObject.sfx = sfxAction;
     preview.sfx = {
-      names,
+      names: names || localizeCommandLineText("Stop Sound Effects", copy),
     };
   }
 

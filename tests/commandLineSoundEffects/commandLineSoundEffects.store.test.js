@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import * as sfxStore from "../../src/components/commandLineSoundEffects/commandLineSoundEffects.store.js";
 import {
   addChannel,
+  closeChannelEditor,
   connectSoundToPrevious,
   createInitialState,
   finishSoundDrag,
   insertSound,
   moveChannel,
+  openChannelEditor,
   removeChannel,
   removeSound,
   selectSfx,
@@ -17,6 +19,8 @@ import {
   setSfx,
   startSoundDrag,
   updateSoundDrag,
+  updateChannel,
+  updateSound,
 } from "../../src/components/commandLineSoundEffects/commandLineSoundEffects.store.js";
 
 const sounds = {
@@ -92,13 +96,17 @@ describe("commandLineSoundEffects.store", () => {
       channels: [
         {
           id: "Weather",
+          applyMode: "singleLine",
           interruption: "immediate",
+          loop: false,
           volume: 75,
           sounds: [],
         },
         {
           id: "UI",
+          applyMode: "singleLine",
           interruption: "immediate",
+          loop: false,
           volume: 75,
           sounds: [],
         },
@@ -110,16 +118,101 @@ describe("commandLineSoundEffects.store", () => {
         (channel) => channel.channelBorderColor,
       ),
     ).toEqual(["bo", "bo"]);
+    expect(
+      selectViewData({ state, i18n }).channels.map((channel) => ({
+        id: channel.id,
+        formKey: channel.channelFormKey,
+      })),
+    ).toEqual([
+      { id: "Weather", formKey: "channel-Weather-false" },
+      { id: "UI", formKey: "channel-UI-false" },
+    ]);
 
     moveChannel({ state }, { channelId: "UI", direction: "up" });
     expect(state.channels.map((channel) => channel.id)).toEqual([
       "UI",
       "Weather",
     ]);
+    expect(
+      selectViewData({ state, i18n }).channels.map((channel) => ({
+        id: channel.id,
+        formKey: channel.channelFormKey,
+      })),
+    ).toEqual([
+      { id: "UI", formKey: "channel-UI-false" },
+      { id: "Weather", formKey: "channel-Weather-false" },
+    ]);
 
     removeChannel({ state }, { channelId: "UI" });
     expect(state.channels.map((channel) => channel.id)).toEqual(["Weather"]);
     expect(state.selectedChannelId).toBeUndefined();
+  });
+
+  it("submits stop entries for removed persistent channels only", () => {
+    const state = createInitialState();
+    setSfx(
+      { state },
+      {
+        sfx: {
+          channels: [
+            {
+              id: "Weather",
+              applyMode: "persistent",
+              sounds: [{ id: "rain-clip", resourceId: "rain" }],
+            },
+            {
+              id: "UI",
+              applyMode: "singleLine",
+              sounds: [{ id: "confirm-clip", resourceId: "confirm" }],
+            },
+          ],
+        },
+      },
+    );
+
+    removeChannel({ state }, { channelId: "Weather" });
+    removeChannel({ state }, { channelId: "UI" });
+
+    expect(selectSfx({ state })).toEqual({
+      channels: [{ id: "Weather", sounds: [] }],
+    });
+  });
+
+  it("edits one channel's sounds without submitting the draft", () => {
+    const state = createInitialState();
+    setRepositoryState({ state }, { sounds });
+    setSfx(
+      { state },
+      {
+        sfx: {
+          channels: [
+            {
+              id: "Weather",
+              sounds: [{ id: "rain-clip", resourceId: "rain" }],
+            },
+          ],
+        },
+      },
+    );
+
+    openChannelEditor({ state }, { channelId: "Weather" });
+    expect(selectViewData({ state, i18n })).toMatchObject({
+      isChannelEditorOpen: true,
+      hasSoundSelection: false,
+      channelEditorTitle: "Weather",
+    });
+
+    setSelectedSound({ state }, { channelId: "Weather", soundId: "rain-clip" });
+    updateSound(
+      { state },
+      { channelId: "Weather", soundId: "rain-clip", values: { volume: 45 } },
+    );
+    expect(selectViewData({ state, i18n }).hasSoundSelection).toBe(true);
+
+    closeChannelEditor({ state });
+    expect(selectViewData({ state, i18n }).isChannelEditorOpen).toBe(false);
+    expect(selectSfx({ state }).channels[0].sounds[0].volume).toBe(45);
+    expect(state.selectedSoundId).toBeUndefined();
   });
 
   it("loads canonical channels and lays out overlapping clips in lanes", () => {
@@ -132,6 +225,7 @@ describe("commandLineSoundEffects.store", () => {
           channels: [
             {
               id: "Weather",
+              applyMode: "persistent",
               volume: 80,
               sounds: [
                 {
@@ -176,7 +270,7 @@ describe("commandLineSoundEffects.store", () => {
 
     const channelView = unselectedViewData.channels[0];
     expect(channelView.durationLabel).toBe("0:06");
-    expect(channelView.channelHeightPx).toBe(276);
+    expect(channelView.channelHeightPx).toBe(284);
     expect(
       channelView.sounds.map((sound) => ({
         durationLabel: sound.durationLabel,
@@ -207,35 +301,77 @@ describe("commandLineSoundEffects.store", () => {
 
     setSelectedChannel({ state }, { channelId: "Weather" });
     const channelSelection = selectViewData({ state, i18n });
+    expect(channelSelection.channels[0].showControls).toBe(true);
+    expect(channelSelection.channels[0].channelFormKey).toBe(
+      "channel-Weather-false",
+    );
     expect(channelSelection.channels[0].channelBorderColor).toBe("pr");
     expect(channelSelection.channels[0].channelHoverBorderColor).toBe("pr");
     expect(channelSelection.selectionHeading).toBe("Channel");
     expect(channelSelection.selectionName).toBe("Weather");
-    expect(channelSelection.form.fields.map((field) => field.name)).toEqual([
-      "interruption",
-      "volume",
+    expect(channelSelection.channelForm.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "loop", type: "segmented-control" },
+          { name: "applyMode", type: "segmented-control" },
+        ],
+      },
+      {
+        type: "row",
+        fields: [
+          { name: "interruption", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
     ]);
-    expect(channelSelection.defaultValues).toEqual({
+    expect(channelSelection.channelForm.fields[0].fields[0].options).toEqual([
+      { value: false, label: "Don't Loop" },
+      { value: true, label: "Loop" },
+    ]);
+    expect(channelSelection.channelForm.fields[0].fields[1].options).toEqual([
+      { value: "singleLine", label: "Single Line" },
+      { value: "persistent", label: "Persistent" },
+    ]);
+    expect(channelSelection.channels[0].channelDefaultValues).toEqual({
+      applyMode: "persistent",
       interruption: "immediate",
+      loop: false,
       volume: 80,
     });
 
+    openChannelEditor({ state }, { channelId: "Weather" });
     setSelectedSound({ state }, { channelId: "Weather", soundId: "rain-clip" });
     const soundSelection = selectViewData({ state, i18n });
     expect(soundSelection.selectionHeading).toBe("Audio");
     expect(soundSelection.selectionName).toBe("Rain");
-    expect(soundSelection.form.fields.map((field) => field.name)).toEqual([
-      "startDelayMs",
-      "loop",
-      "volume",
+    expect(soundSelection.form.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "startDelayMs", type: "input-duration" },
+          { type: "slot", slot: "startDelaySpacer" },
+        ],
+      },
+      {
+        type: "row",
+        fields: [
+          { name: "loop", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
     ]);
-    expect(soundSelection.form.fields[0]).toMatchObject({
+    expect(soundSelection.form.fields[0].fields[0]).toMatchObject({
       name: "startDelayMs",
       label: "Start Delay",
       type: "input-duration",
       min: 0,
       step: 10,
     });
+    expect(soundSelection.form.fields[1].fields[0].options).toEqual([
+      { value: false, label: "Don't Loop" },
+      { value: true, label: "Loop" },
+    ]);
     expect(soundSelection.defaultValues).toEqual({
       startDelayMs: 0,
       loop: true,
@@ -312,7 +448,9 @@ describe("commandLineSoundEffects.store", () => {
       channels: [
         {
           id: "default",
+          applyMode: "singleLine",
           interruption: "immediate",
+          loop: false,
           volume: 100,
           sounds: [
             {
@@ -333,6 +471,71 @@ describe("commandLineSoundEffects.store", () => {
         },
       ],
     });
+  });
+
+  it("keeps channel and individual sound loops mutually exclusive", () => {
+    const state = createInitialState();
+    setRepositoryState({ state }, { sounds });
+    setSfx(
+      { state },
+      {
+        sfx: {
+          channels: [
+            {
+              id: "Weather",
+              loop: true,
+              sounds: [{ id: "rain-clip", resourceId: "rain", loop: true }],
+            },
+          ],
+        },
+      },
+    );
+
+    expect(state.channels[0].loop).toBe(true);
+    expect(state.channels[0].sounds[0].loop).toBe(false);
+    expect(selectViewData({ state, i18n }).channels[0].channelFormKey).toBe(
+      "channel-Weather-true",
+    );
+
+    updateSound(
+      { state },
+      {
+        channelId: "Weather",
+        soundId: "rain-clip",
+        values: { loop: true },
+      },
+    );
+    expect(state.channels[0].loop).toBe(false);
+    expect(state.channels[0].sounds[0].loop).toBe(true);
+    expect(selectViewData({ state, i18n }).channels[0].channelFormKey).toBe(
+      "channel-Weather-false",
+    );
+
+    updateChannel({ state }, { channelId: "Weather", values: { loop: true } });
+    expect(state.channels[0].loop).toBe(true);
+    expect(state.channels[0].sounds[0].loop).toBe(false);
+    expect(selectViewData({ state, i18n }).channels[0].channelFormKey).toBe(
+      "channel-Weather-true",
+    );
+  });
+
+  it("updates an SFX channel apply mode", () => {
+    const state = createInitialState();
+    addChannel({ state }, { id: "Weather" });
+
+    expect(state.channels[0].applyMode).toBe("singleLine");
+
+    updateChannel(
+      { state },
+      { channelId: "Weather", values: { applyMode: "persistent" } },
+    );
+    expect(state.channels[0].applyMode).toBe("persistent");
+
+    updateChannel(
+      { state },
+      { channelId: "Weather", values: { applyMode: "unsupported" } },
+    );
+    expect(state.channels[0].applyMode).toBe("singleLine");
   });
 
   it("places inserted sounds without reflowing the channel after removal", () => {

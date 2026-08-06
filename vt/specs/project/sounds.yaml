@@ -266,11 +266,50 @@ steps:
     steps:
       - action: click
   - action: waitFor
-    selector: "rvn-command-line-bgm#commandLineBgm #emptyAddButton"
+    selector: "rvn-command-line-bgm#commandLineBgm #bgmChannel"
     state: visible
     timeoutMs: 10000
   - action: wait
     ms: 300
+  - action: assert
+    type: js
+    fn: eval
+    args:
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); return !deepQuery(bgm?.shadowRoot, '#channelForm'); })()"
+    value: true
+  - action: select
+    selector: "rvn-command-line-bgm#commandLineBgm #bgmChannel"
+    steps:
+      - action: hover
+  - action: assert
+    type: js
+    fn: eval
+    args:
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); const channel = deepQuery(bgm?.shadowRoot, '#bgmChannel'); const emptyState = channel?.querySelector('.bgmEmptyAdd'); if (!channel || !emptyState) return false; const style = getComputedStyle(channel); return channel.matches(':hover') && channel.getAttribute('bgc') === 'bg' && channel.getAttribute('h-bgc') === null && emptyState.getAttribute('bgc') === null && style.backgroundColor === style.getPropertyValue('--background').trim() && style.borderTopWidth !== '0px' && style.borderColor === style.getPropertyValue('--accent').trim(); })()"
+    value: true
+  - action: screenshot
+  - action: select
+    selector: "rvn-command-line-bgm#commandLineBgm #bgmChannel"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm #channelEditorDialog[open]"
+    state: attached
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm #emptyAddButton"
+    state: visible
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm #channelEditorConfirmButton"
+    state: visible
+    timeoutMs: 5000
+  - action: assert
+    type: js
+    fn: eval
+    args:
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); const title = deepQuery(bgm?.shadowRoot, '#channelEditorTitle'); const channel = deepQuery(bgm?.shadowRoot, '#editorChannel'); return Boolean(title && channel && Math.abs(title.getBoundingClientRect().left - channel.getBoundingClientRect().left) <= 1); })()"
+    value: true
   - action: screenshot
   - action: select
     selector: "rvn-command-line-bgm#commandLineBgm #emptyAddButton"
@@ -295,19 +334,15 @@ steps:
   - action: wait
     ms: 300
   - action: screenshot
-  - action: waitFor
-    selector: "rvn-command-line-bgm#commandLineBgm rtgl-form#form rtgl-segmented-control[data-field-name='loop']"
-    state: visible
-    timeoutMs: 5000
   - action: select
-    selector: "rvn-command-line-bgm#commandLineBgm rtgl-form#form rtgl-segmented-control[data-field-name='loop'] #option0"
+    selector: "rvn-command-line-bgm#commandLineBgm rtgl-form#soundForm rtgl-segmented-control[data-field-name='loop'] #option1"
     steps:
       - action: click
   - action: assert
     type: js
     fn: eval
     args:
-      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); const loop = deepQuery(bgm?.shadowRoot, \"rtgl-segmented-control[data-field-name='loop']\"); const option = deepQuery(loop?.shadowRoot, '#option0'); return option?.getAttribute('aria-pressed'); })()"
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); const loop = deepQuery(bgm?.shadowRoot, \"rtgl-segmented-control[data-field-name='loop']\"); const option = deepQuery(loop?.shadowRoot, '#option1'); return option?.getAttribute('aria-pressed'); })()"
     value: "true"
   - action: select
     selector: "rvn-command-line-bgm#commandLineBgm #insertAfterButton0"
@@ -340,26 +375,174 @@ steps:
     ms: 300
   - action: screenshot
   - action: select
-    selector: "rvn-command-line-bgm#commandLineBgm rtgl-form#form rtgl-input-number#field0 input"
-    steps:
-      - action: clear
-      - action: write
-        value: "0"
-      - action: blur
-  - action: wait
-    ms: 300
-  - action: screenshot
-  - action: select
-    selector: "rvn-command-line-bgm#commandLineBgm #channelSelectButton"
+    selector: "rvn-command-line-bgm#commandLineBgm #channelEditorConfirmButton"
     steps:
       - action: click
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm #channelEditorDialog[open]"
+    state: hidden
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm #channelPreviewSound1"
+    state: visible
+    timeoutMs: 5000
   - action: wait
     ms: 250
   - action: assert
     type: js
     fn: eval
     args:
-      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); return Boolean(deepQuery(bgm?.shadowRoot, \"rtgl-form#form [data-field-name='loop']\")); })()"
-    value: false
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const bgm = deepQuery(document, 'rvn-command-line-bgm#commandLineBgm'); return Boolean(deepQuery(bgm?.shadowRoot, '#channelForm')) && !deepQuery(bgm?.shadowRoot, \"rtgl-form#channelForm [data-field-name='loop']\"); })()"
+    value: true
+  - action: screenshot
+  - action: keypress
+    key: Escape
+  - action: waitFor
+    selector: "rvn-command-line-bgm#commandLineBgm"
+    state: hidden
+    timeoutMs: 5000
+  - action: select
+    selector: "rvn-system-actions#systemActions #addActionButton"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-actions#commandLineActions [data-action-id='30']"
+    state: visible
+    timeoutMs: 5000
+  - action: select
+    selector: "rvn-command-line-actions#commandLineActions [data-action-id='30']"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice #voiceChannel"
+    state: visible
+    timeoutMs: 10000
+  - action: screenshot
+  - action: select
+    selector: "rvn-command-line-voice#commandLineVoice #voiceChannel"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice #channelEditorDialog[open]"
+    state: attached
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice #emptyAddButton"
+    state: visible
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice #channelEditorConfirmButton"
+    state: visible
+    timeoutMs: 5000
+  - action: screenshot
+  - action: select
+    selector: "rvn-command-line-voice#commandLineVoice #channelEditorConfirmButton"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice #channelEditorDialog[open]"
+    state: hidden
+    timeoutMs: 5000
+  - action: keypress
+    key: Escape
+  - action: waitFor
+    selector: "rvn-command-line-voice#commandLineVoice"
+    state: hidden
+    timeoutMs: 5000
+  - action: select
+    selector: "rvn-system-actions#systemActions #addActionButton"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-actions#commandLineActions [data-action-id='6']"
+    state: visible
+    timeoutMs: 5000
+  - action: select
+    selector: "rvn-command-line-actions#commandLineActions [data-action-id='6']"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #addChannelButton"
+    state: visible
+    timeoutMs: 10000
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #addChannelButton"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects rtgl-form#addChannelForm rtgl-input#field0 input"
+    state: visible
+    timeoutMs: 5000
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects rtgl-form#addChannelForm rtgl-input#field0 input"
+    steps:
+      - action: write
+        value: Channel One
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects rtgl-form#addChannelForm rtgl-button[data-action-id='submit']"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #sfxChannel0"
+    state: visible
+    timeoutMs: 5000
+  - action: screenshot
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #sfxChannel0"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #channelEditorDialog[open]"
+    state: attached
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #emptyAddButton0"
+    state: visible
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #channelEditorConfirmButton"
+    state: visible
+    timeoutMs: 5000
+  - action: screenshot
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #emptyAddButton0"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #resourceItem0x0"
+    state: visible
+    timeoutMs: 10000
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #resourceItem0x0"
+    steps:
+      - action: click
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #buttonSelect"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #soundClip0x0"
+    state: visible
+    timeoutMs: 10000
+  - action: select
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #channelEditorConfirmButton"
+    steps:
+      - action: click
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #channelEditorDialog[open]"
+    state: hidden
+    timeoutMs: 5000
+  - action: waitFor
+    selector: "rvn-command-line-sound-effects#commandLineSoundEffects #channelForm0"
+    state: attached
+    timeoutMs: 5000
+  - action: assert
+    type: js
+    fn: eval
+    args:
+      - "(() => { const deepQuery = (root, selector) => { const direct = root?.querySelector?.(selector); if (direct) return direct; for (const node of root?.querySelectorAll?.('*') ?? []) { const found = node.shadowRoot ? deepQuery(node.shadowRoot, selector) : undefined; if (found) return found; } return undefined; }; const sfx = deepQuery(document, 'rvn-command-line-sound-effects#commandLineSoundEffects'); const form = deepQuery(sfx?.shadowRoot, '#channelForm0'); const addButton = deepQuery(sfx?.shadowRoot, '#addChannelButton'); return Boolean(deepQuery(form?.shadowRoot, \"[data-field-name='loop']\") && deepQuery(form?.shadowRoot, \"[data-field-name='applyMode']\") && deepQuery(form?.shadowRoot, \"[data-field-name='interruption']\") && deepQuery(form?.shadowRoot, \"[data-field-name='volume']\") && addButton && form.getBoundingClientRect().bottom <= addButton.getBoundingClientRect().top); })()"
+    value: true
+  - action: wait
+    ms: 300
   - action: screenshot
 ---

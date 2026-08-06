@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import * as voiceStore from "../../src/components/commandLineVoice/commandLineVoice.store.js";
 import {
   clearSelectedSound,
+  closeChannelEditor,
   connectSoundToPrevious,
   createInitialState,
   insertSound,
+  openChannelEditor,
   removeSound,
   selectSelectedSoundId,
   selectViewData,
@@ -72,8 +74,9 @@ describe("commandLineVoice.store", () => {
     expect(viewData.channelLabel).toBe("Voice Channel");
     expect(viewData.channelDurationLabel).toBe("0:00");
     expect(viewData.hasSelection).toBe(false);
+    expect(viewData.showChannelControls).toBe(false);
+    expect(viewData.channelFormKey).toBe("channel-false");
     expect(viewData.channelBorderColor).toBe("bo");
-    expect(viewData.channelHoverBorderColor).toBe("ac");
     expect(viewData.selectionHeading).toBe("");
     expect(viewData.selectionName).toBe("");
 
@@ -81,19 +84,79 @@ describe("commandLineVoice.store", () => {
     const selectedViewData = selectViewData({ state, i18n });
     expect(selectedViewData.hasSelection).toBe(true);
     expect(selectedViewData.channelBorderColor).toBe("pr");
-    expect(selectedViewData.channelHoverBorderColor).toBe("pr");
     expect(selectedViewData.selectionHeading).toBe("Channel");
     expect(selectedViewData.selectionName).toBe("Voice Channel");
-    expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
-      "loop",
-      "interruption",
-      "volume",
+    expect(selectedViewData.form.fields).toMatchObject([
+      { name: "loop", type: "segmented-control" },
+      {
+        type: "row",
+        fields: [
+          { name: "interruption", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
     ]);
     expect(selectedViewData.defaultValues).toEqual({
       interruption: "immediate",
       loop: false,
       volume: 100,
     });
+    expect(selectedViewData.channelForm.fields).toMatchObject([
+      { name: "loop", type: "segmented-control" },
+      {
+        type: "row",
+        fields: [
+          { name: "interruption", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
+    ]);
+    expect(selectedViewData.editChannelLabel).toBe("Edit Channel");
+  });
+
+  it("edits sounds in the channel editor without submitting the draft", () => {
+    const state = createInitialState();
+    setVoice(
+      { state },
+      {
+        voice: {
+          sounds: [{ id: "intro-clip", resourceId: "intro" }],
+        },
+      },
+    );
+
+    openChannelEditor({ state });
+    expect(selectViewData({ state, i18n })).toMatchObject({
+      isChannelEditorOpen: true,
+      hasSoundSelection: false,
+    });
+
+    setSelectedSound({ state }, { soundId: "intro-clip" });
+    updateSound({ state }, { soundId: "intro-clip", values: { volume: 40 } });
+    const editorViewData = selectViewData({ state, i18n });
+    expect(editorViewData.hasSoundSelection).toBe(true);
+    expect(editorViewData.showChannelControls).toBe(true);
+    expect(editorViewData.form.fields).toMatchObject([
+      {
+        type: "row",
+        fields: [
+          { name: "startDelayMs", type: "input-duration" },
+          { type: "slot", slot: "startDelaySpacer" },
+        ],
+      },
+      {
+        type: "row",
+        fields: [
+          { name: "loop", type: "segmented-control" },
+          { name: "volume", type: "slider-with-input" },
+        ],
+      },
+    ]);
+
+    closeChannelEditor({ state });
+    expect(selectViewData({ state, i18n }).isChannelEditorOpen).toBe(false);
+    expect(selectVoicePayload({ state }).sounds[0].volume).toBe(40);
+    expect(selectSelectedSoundId({ state })).toBeUndefined();
   });
 
   it("migrates a legacy Voice sound without losing its start delay", () => {
@@ -187,12 +250,7 @@ describe("commandLineVoice.store", () => {
     const selectedViewData = selectViewData({ state, i18n });
     expect(selectedViewData.selectionHeading).toBe("Audio");
     expect(selectedViewData.selectionName).toBe("Intro");
-    expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
-      "startDelayMs",
-      "loop",
-      "volume",
-    ]);
-    expect(selectedViewData.form.fields[0]).toMatchObject({
+    expect(selectedViewData.form.fields[0].fields[0]).toMatchObject({
       name: "startDelayMs",
       label: "Start Delay",
       type: "input-duration",
@@ -223,10 +281,14 @@ describe("commandLineVoice.store", () => {
     updateChannel({ state }, { values: { loop: true } });
     expect(selectVoicePayload({ state }).loop).toBe(true);
     expect(selectVoicePayload({ state }).sounds[0].loop).toBe(false);
+    expect(selectViewData({ state, i18n }).channelFormKey).toBe("channel-true");
 
     updateSound({ state }, { soundId: "intro-clip", values: { loop: true } });
     expect(selectVoicePayload({ state }).loop).toBe(false);
     expect(selectVoicePayload({ state }).sounds[0].loop).toBe(true);
+    expect(selectViewData({ state, i18n }).channelFormKey).toBe(
+      "channel-false",
+    );
   });
 
   it("places inserted Voice sounds without reflowing after removal", () => {

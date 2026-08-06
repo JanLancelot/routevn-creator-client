@@ -13,6 +13,7 @@ import {
   setRepositoryState,
   setSelectedSound,
   startSoundDrag,
+  updateSound,
   updateSoundDrag,
   finishSoundDrag,
 } from "../../src/components/commandLineBgm/commandLineBgm.store.js";
@@ -95,13 +96,11 @@ describe("commandLineBgm.store", () => {
     expect(selectedViewData.selectionHeading).toBe("Channel");
     expect(selectedViewData.selectionName).toBe("BGM Channel");
     expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
-      "loop",
       "interruption",
       "volume",
     ]);
     expect(selectedViewData.defaultValues).toEqual({
       interruption: "immediate",
-      loop: true,
       volume: 75,
     });
   });
@@ -211,6 +210,7 @@ describe("commandLineBgm.store", () => {
     expect(selectedViewData.selectionName).toBe("Intro");
     expect(selectedViewData.form.fields.map((field) => field.name)).toEqual([
       "startDelayMs",
+      "loop",
       "volume",
     ]);
     expect(selectedViewData.form.fields[0]).toMatchObject({
@@ -222,7 +222,60 @@ describe("commandLineBgm.store", () => {
     });
     expect(selectedViewData.defaultValues).toEqual({
       startDelayMs: 0,
+      loop: false,
       volume: 90,
+    });
+  });
+
+  it("uses the channel loop by default unless an individual sound loops", () => {
+    const state = createInitialState();
+    setBgm(
+      { state },
+      {
+        bgm: {
+          loop: false,
+          sounds: [{ id: "intro-clip", resourceId: "intro", loop: true }],
+        },
+      },
+    );
+
+    expect(selectBgm({ state }).loop).toBe(false);
+    expect(selectBgm({ state }).sounds[0].loop).toBe(true);
+
+    updateSound({ state }, { soundId: "intro-clip", values: { loop: false } });
+    expect(selectBgm({ state }).loop).toBe(true);
+    expect(selectBgm({ state }).sounds[0].loop).toBe(false);
+
+    updateSound({ state }, { soundId: "intro-clip", values: { loop: true } });
+    expect(selectBgm({ state }).loop).toBe(false);
+    expect(selectBgm({ state }).sounds[0].loop).toBe(true);
+  });
+
+  it("restores the channel loop after removing the final looping sound", () => {
+    const state = createInitialState();
+    setBgm(
+      { state },
+      {
+        bgm: {
+          loop: false,
+          sounds: [
+            { id: "first-loop", resourceId: "intro", loop: true },
+            { id: "second-loop", resourceId: "theme", loop: true },
+            { id: "remaining-clip", resourceId: "intro", loop: false },
+          ],
+        },
+      },
+    );
+
+    removeSound({ state }, { soundId: "first-loop" });
+    expect(selectBgm({ state }).loop).toBe(false);
+
+    removeSound({ state }, { soundId: "second-loop" });
+    expect(selectBgm({ state }).loop).toBe(true);
+    expect(selectBgm({ state }).sounds).toHaveLength(1);
+    expect(selectBgm({ state }).sounds[0]).toMatchObject({
+      id: "remaining-clip",
+      loop: false,
     });
   });
 

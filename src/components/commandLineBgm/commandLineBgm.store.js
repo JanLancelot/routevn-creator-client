@@ -47,7 +47,7 @@ const normalizeSounds = (sounds = []) => {
     const normalizedSound = {
       id,
       resourceId: sound.resourceId,
-      loop: false,
+      loop: sound.loop ?? false,
       volume: normalizeVolume(sound.volume, DEFAULT_SOUND_VOLUME),
       startDelayMs: normalizeAudioStartDelayMs(sound.startDelayMs),
     };
@@ -58,6 +58,10 @@ const normalizeSounds = (sounds = []) => {
     }
     return normalizedSound;
   });
+};
+
+const syncBgmChannelLoop = (bgm) => {
+  bgm.loop = !bgm.sounds.some((sound) => sound.loop);
 };
 
 const normalizeBgm = (bgm = {}) => {
@@ -81,21 +85,18 @@ const normalizeBgm = (bgm = {}) => {
     ]);
   }
 
+  if (normalizedBgm.loop) {
+    normalizedBgm.sounds.forEach((sound) => {
+      sound.loop = false;
+    });
+  }
+
   sortAudioSoundsByStartDelay(normalizedBgm.sounds);
   return normalizedBgm;
 };
 
 const CHANNEL_FORM = {
   fields: [
-    {
-      name: "loop",
-      description: "Loop",
-      type: "segmented-control",
-      options: [
-        { value: true, label: "Loop" },
-        { value: false, label: "Don't Loop" },
-      ],
-    },
     {
       name: "interruption",
       description: "Interruption",
@@ -124,6 +125,15 @@ const SOUND_FORM = {
       type: "input-duration",
       min: 0,
       step: 10,
+    },
+    {
+      name: "loop",
+      description: "Loop",
+      type: "segmented-control",
+      options: [
+        { value: true, label: "Loop" },
+        { value: false, label: "Don't Loop" },
+      ],
     },
     {
       name: "volume",
@@ -291,11 +301,11 @@ export const selectViewData = ({ state, i18n }) => {
   const defaultValues = selectedSound
     ? {
         startDelayMs: selectedSound.startDelayMs,
+        loop: selectedSound.loop,
         volume: selectedSound.volume,
       }
     : {
         interruption: state.bgm.interruption,
-        loop: state.bgm.loop,
         volume: state.bgm.volume,
       };
 
@@ -369,9 +379,6 @@ export const updateChannel = ({ state }, { values = {} } = {}) => {
       values.interruption,
     );
   }
-  if (values.loop !== undefined) {
-    state.bgm.loop = values.loop;
-  }
   if (values.volume !== undefined) {
     state.bgm.volume = normalizeVolume(values.volume, DEFAULT_CHANNEL_VOLUME);
   }
@@ -383,6 +390,10 @@ export const updateSound = ({ state }, { soundId, values = {} } = {}) => {
     return;
   }
 
+  if (values.loop !== undefined) {
+    sound.loop = values.loop;
+    syncBgmChannelLoop(state.bgm);
+  }
   if (values.volume !== undefined) {
     sound.volume = normalizeVolume(values.volume, DEFAULT_SOUND_VOLUME);
   }
@@ -490,6 +501,7 @@ export const insertSound = (
   });
   state.bgm.sounds.splice(insertIndex, 0, sound);
   sortAudioSoundsByStartDelay(state.bgm.sounds);
+  syncBgmChannelLoop(state.bgm);
   state.channelSelected = false;
   state.selectedSoundId = sound.id;
   state.tempSelectedResourceId = undefined;
@@ -497,6 +509,7 @@ export const insertSound = (
 
 export const removeSound = ({ state }, { soundId } = {}) => {
   state.bgm.sounds = state.bgm.sounds.filter((sound) => sound.id !== soundId);
+  syncBgmChannelLoop(state.bgm);
   state.channelSelected = true;
   state.selectedSoundId = undefined;
 };

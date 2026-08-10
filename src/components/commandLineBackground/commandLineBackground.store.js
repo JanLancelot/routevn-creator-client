@@ -179,6 +179,10 @@ export const createInitialState = () => ({
   backgroundColorOptionEnabled: false,
   selectedOpacity: undefined,
   opacityOptionEnabled: false,
+  selectedFlipX: undefined,
+  flipXOptionEnabled: false,
+  selectedFlipY: undefined,
+  flipYOptionEnabled: false,
   backgroundFilters: undefined,
   backgroundShaderAdjustments: createInitialCommandLineShaderAdjustments(),
   selectedBlurEnabled: false,
@@ -524,6 +528,52 @@ export const removeOpacityOption = ({ state }) => {
 
 export const selectOpacityOptionEnabled = ({ state }) => {
   return state.opacityOptionEnabled;
+};
+
+export const setSelectedFlipX = ({ state }, { flipX } = {}) => {
+  state.selectedFlipX = flipX === true || flipX === "true";
+  state.flipXOptionEnabled = state.selectedFlipX;
+};
+
+export const selectSelectedFlipX = ({ state }) => {
+  return state.selectedFlipX;
+};
+
+export const showFlipXOption = ({ state }) => {
+  state.flipXOptionEnabled = true;
+  state.selectedFlipX = true;
+};
+
+export const removeFlipXOption = ({ state }) => {
+  state.flipXOptionEnabled = false;
+  state.selectedFlipX = false;
+};
+
+export const selectFlipXOptionEnabled = ({ state }) => {
+  return state.flipXOptionEnabled;
+};
+
+export const setSelectedFlipY = ({ state }, { flipY } = {}) => {
+  state.selectedFlipY = flipY === true || flipY === "true";
+  state.flipYOptionEnabled = state.selectedFlipY;
+};
+
+export const selectSelectedFlipY = ({ state }) => {
+  return state.selectedFlipY;
+};
+
+export const showFlipYOption = ({ state }) => {
+  state.flipYOptionEnabled = true;
+  state.selectedFlipY = true;
+};
+
+export const removeFlipYOption = ({ state }) => {
+  state.flipYOptionEnabled = false;
+  state.selectedFlipY = false;
+};
+
+export const selectFlipYOptionEnabled = ({ state }) => {
+  return state.flipYOptionEnabled;
 };
 
 export const setBackgroundFilters = ({ state }, { filters } = {}) => {
@@ -1115,6 +1165,32 @@ export const selectViewData = ({ state, i18n }) => {
       ],
     });
   }
+  if (state.flipXOptionEnabled) {
+    optionFields.push({
+      type: "section",
+      id: "flip-x",
+      label: "Flip X",
+      action: {
+        id: "remove",
+        icon: "x",
+        label: "Remove",
+      },
+      fields: [],
+    });
+  }
+  if (state.flipYOptionEnabled) {
+    optionFields.push({
+      type: "section",
+      id: "flip-y",
+      label: "Flip Y",
+      action: {
+        id: "remove",
+        icon: "x",
+        label: "Remove",
+      },
+      fields: [],
+    });
+  }
   for (const adjustment of COMMAND_LINE_SHADER_ADJUSTMENTS) {
     if (!state.backgroundShaderAdjustments[adjustment.id].enabled) {
       continue;
@@ -1215,6 +1291,8 @@ export const selectViewData = ({ state, i18n }) => {
   const allOptionsVisible =
     state.backgroundColorOptionEnabled &&
     state.opacityOptionEnabled &&
+    state.flipXOptionEnabled &&
+    state.flipYOptionEnabled &&
     COMMAND_LINE_SHADER_ADJUSTMENTS.every(
       (adjustment) => state.backgroundShaderAdjustments[adjustment.id].enabled,
     ) &&
@@ -1238,6 +1316,8 @@ export const selectViewData = ({ state, i18n }) => {
     customTransform: state.customTransformEnabled,
     transformId: state.selectedTransformId,
     opacity: state.selectedOpacity ?? DEFAULT_BACKGROUND_OPACITY,
+    flipX: state.selectedFlipX,
+    flipY: state.selectedFlipY,
     playbackContinuity: state.selectedAnimationPlaybackContinuity,
     playbackSpeed: state.selectedAnimationPlaybackSpeed,
     playbackLoop: state.selectedAnimationLoop,
@@ -1304,6 +1384,10 @@ export const selectViewData = ({ state, i18n }) => {
         JSON.stringify(state.selectedCustomTransform ?? {}),
         state.opacityOptionEnabled ? "opacity-option" : "no-opacity-option",
         state.selectedOpacity ?? DEFAULT_BACKGROUND_OPACITY,
+        state.flipXOptionEnabled ? "flip-x-option" : "no-flip-x-option",
+        state.selectedFlipX ? "flip-x" : "no-flip-x",
+        state.flipYOptionEnabled ? "flip-y-option" : "no-flip-y-option",
+        state.selectedFlipY ? "flip-y" : "no-flip-y",
         ...shaderAdjustmentKeyParts,
         state.selectedBlurEnabled ? "blur" : "no-blur",
         state.selectedBlur.x,

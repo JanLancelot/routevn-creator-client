@@ -13,6 +13,8 @@ import {
 } from "../../src/components/commandLineBackground/commandLineBackground.handlers.js";
 import {
   createInitialState,
+  removeFlipXOption,
+  removeFlipYOption,
   removeBackgroundShaderAdjustmentOption,
   removeOpacityOption,
   selectAnimationOptionEnabled,
@@ -23,6 +25,8 @@ import {
   selectBackgroundShaderAdjustmentValue,
   selectCustomTransform,
   selectCustomTransformEnabled,
+  selectFlipXOptionEnabled,
+  selectFlipYOptionEnabled,
   selectMode,
   selectOpacityOptionEnabled,
   selectPendingResourceId,
@@ -36,6 +40,8 @@ import {
   selectSelectedBlur,
   selectSelectedBlurActionValue,
   selectSelectedColor,
+  selectSelectedFlipX,
+  selectSelectedFlipY,
   selectSelectedOpacity,
   selectSelectedResource,
   selectSelectedTransform,
@@ -59,12 +65,16 @@ import {
   setSelectedBlurField,
   setSelectedBackgroundShaderAdjustment,
   setSelectedColor,
+  setSelectedFlipX,
+  setSelectedFlipY,
   setSelectedOpacity,
   setSelectedResource,
   setSelectedTransform,
   showBackgroundColorOption,
   showBackgroundShaderAdjustmentOption,
   showBlurOption,
+  showFlipXOption,
+  showFlipYOption,
   showOpacityOption,
   setTab,
   setTempSelectedResource,
@@ -77,6 +87,8 @@ const createEmptyCollection = () => ({
 });
 
 const createStoreApi = (state) => ({
+  removeFlipXOption: (payload) => removeFlipXOption({ state }, payload),
+  removeFlipYOption: (payload) => removeFlipYOption({ state }, payload),
   removeBackgroundShaderAdjustmentOption: (payload) =>
     removeBackgroundShaderAdjustmentOption({ state }, payload),
   removeOpacityOption: (payload) => removeOpacityOption({ state }, payload),
@@ -91,6 +103,8 @@ const createStoreApi = (state) => ({
     selectBackgroundShaderAdjustmentValue({ state }, payload),
   selectCustomTransform: () => selectCustomTransform({ state }),
   selectCustomTransformEnabled: () => selectCustomTransformEnabled({ state }),
+  selectFlipXOptionEnabled: () => selectFlipXOptionEnabled({ state }),
+  selectFlipYOptionEnabled: () => selectFlipYOptionEnabled({ state }),
   selectMode: () => selectMode({ state }),
   selectOpacityOptionEnabled: () => selectOpacityOptionEnabled({ state }),
   selectPendingResourceId: () => selectPendingResourceId({ state }),
@@ -108,6 +122,8 @@ const createStoreApi = (state) => ({
   selectSelectedBlur: () => selectSelectedBlur({ state }),
   selectSelectedBlurActionValue: () => selectSelectedBlurActionValue({ state }),
   selectSelectedColor: () => selectSelectedColor({ state }),
+  selectSelectedFlipX: () => selectSelectedFlipX({ state }),
+  selectSelectedFlipY: () => selectSelectedFlipY({ state }),
   selectSelectedOpacity: () => selectSelectedOpacity({ state }),
   selectSelectedResource: () => selectSelectedResource({ state }),
   selectSelectedTransform: () => selectSelectedTransform({ state }),
@@ -137,6 +153,8 @@ const createStoreApi = (state) => ({
   setSelectedBackgroundShaderAdjustment: (payload) =>
     setSelectedBackgroundShaderAdjustment({ state }, payload),
   setSelectedColor: (payload) => setSelectedColor({ state }, payload),
+  setSelectedFlipX: (payload) => setSelectedFlipX({ state }, payload),
+  setSelectedFlipY: (payload) => setSelectedFlipY({ state }, payload),
   setSelectedOpacity: (payload) => setSelectedOpacity({ state }, payload),
   setSelectedResource: (payload) => setSelectedResource({ state }, payload),
   setSelectedTransform: (payload) => setSelectedTransform({ state }, payload),
@@ -149,6 +167,8 @@ const createStoreApi = (state) => ({
   showBackgroundShaderAdjustmentOption: (payload) =>
     showBackgroundShaderAdjustmentOption({ state }, payload),
   showBlurOption: (payload) => showBlurOption({ state }, payload),
+  showFlipXOption: (payload) => showFlipXOption({ state }, payload),
+  showFlipYOption: (payload) => showFlipYOption({ state }, payload),
   showOpacityOption: (payload) => showOpacityOption({ state }, payload),
 });
 
@@ -337,6 +357,27 @@ describe("commandLineBackground.handlers", () => {
     expect(selectSelectedAnimationPlaybackSpeed({ state })).toBe(1.5);
     expect(selectSelectedAnimationLoop({ state })).toBe(true);
     expect(selectBackgroundLoop({ state })).toBe(true);
+  });
+
+  it("hydrates explicit background flip overrides before mount", () => {
+    const state = createInitialState();
+
+    handleBeforeMount({
+      store: createStoreApi(state),
+      props: {
+        background: {
+          resourceId: "bg-school",
+          flipX: false,
+          flipY: true,
+        },
+      },
+    });
+
+    expect(selectFlipXOptionEnabled({ state })).toBe(false);
+    expect(selectSelectedFlipX({ state })).toBe(false);
+    expect(selectFlipYOptionEnabled({ state })).toBe(true);
+    expect(selectSelectedFlipY({ state })).toBe(true);
+    expect(selectCustomTransformEnabled({ state })).toBe(false);
   });
 
   it("hydrates an existing spritesheet animation before repository setup", () => {
@@ -991,6 +1032,16 @@ describe("commandLineBackground.handlers", () => {
           label: "Blur",
           key: "blur",
         },
+        {
+          type: "item",
+          label: "Flip X",
+          key: "flip-x",
+        },
+        {
+          type: "item",
+          label: "Flip Y",
+          key: "flip-y",
+        },
       ],
       x: 120,
       y: 240,
@@ -1284,6 +1335,16 @@ describe("commandLineBackground.handlers", () => {
           label: "Blur",
           key: "blur",
         },
+        {
+          type: "item",
+          label: "Flip X",
+          key: "flip-x",
+        },
+        {
+          type: "item",
+          label: "Flip Y",
+          key: "flip-y",
+        },
       ],
       x: 120,
       y: 240,
@@ -1291,6 +1352,149 @@ describe("commandLineBackground.handlers", () => {
     });
     expect(selectOpacityOptionEnabled({ state })).toBe(true);
     expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("adds, updates, submits, and removes background flip overrides", async () => {
+    const state = createInitialState();
+    const render = vi.fn();
+    const dispatchEvent = vi.fn();
+    const showDropdownMenu = vi.fn().mockResolvedValue({
+      item: { key: "flip-x" },
+    });
+
+    setRepositoryCollections(state);
+    setSelectedResource(
+      { state },
+      {
+        resourceId: "bg-school",
+        resourceType: "image",
+      },
+    );
+    setSelectedTransform({ state }, { transformId: "bg-center" });
+
+    await handleOptionsSectionAction(
+      {
+        appService: { showDropdownMenu },
+        i18n: {
+          resourcePages: {},
+          sceneEditorPage: {},
+          commandLinePage: {},
+        },
+        store: createStoreApi(state),
+        render,
+        dispatchEvent,
+      },
+      {
+        _event: {
+          detail: {
+            sectionId: "options",
+            actionId: "add",
+            position: { x: 120, y: 240 },
+          },
+        },
+      },
+    );
+
+    expect(selectFlipXOptionEnabled({ state })).toBe(true);
+    expect(selectSelectedFlipX({ state })).toBe(true);
+    expect(dispatchEvent.mock.calls[0][0].detail).toEqual({
+      presentationState: {
+        background: {
+          resourceId: "bg-school",
+          flipX: true,
+          transformId: "bg-center",
+        },
+      },
+    });
+
+    handleFormInputChange(
+      {
+        store: createStoreApi(state),
+        render,
+        dispatchEvent,
+      },
+      {
+        _event: {
+          detail: {
+            name: "flipX",
+            value: false,
+          },
+        },
+      },
+    );
+    handleFormInputChange(
+      {
+        store: createStoreApi(state),
+        render,
+        dispatchEvent,
+      },
+      {
+        _event: {
+          detail: {
+            name: "flipY",
+            value: true,
+          },
+        },
+      },
+    );
+    handleSubmitClick(
+      {
+        dispatchEvent,
+        store: createStoreApi(state),
+      },
+      {},
+    );
+
+    expect(dispatchEvent.mock.calls[3][0].detail).toEqual({
+      background: {
+        resourceId: "bg-school",
+        flipX: false,
+        flipY: true,
+        transformId: "bg-center",
+      },
+    });
+
+    await handleOptionsSectionAction(
+      {
+        store: createStoreApi(state),
+        render,
+        dispatchEvent,
+      },
+      {
+        _event: {
+          detail: {
+            sectionId: "flip-x",
+            actionId: "remove",
+          },
+        },
+      },
+    );
+
+    expect(selectFlipXOptionEnabled({ state })).toBe(false);
+    expect(selectSelectedFlipX({ state })).toBe(false);
+    expect(dispatchEvent.mock.calls[4][0].detail).toEqual({
+      presentationState: {
+        background: {
+          resourceId: "bg-school",
+          flipX: false,
+          flipY: true,
+          transformId: "bg-center",
+        },
+      },
+    });
+
+    handleSubmitClick({
+      dispatchEvent,
+      store: createStoreApi(state),
+    });
+    expect(dispatchEvent.mock.calls[5][0].detail).toEqual({
+      background: {
+        resourceId: "bg-school",
+        flipX: false,
+        flipY: true,
+        transformId: "bg-center",
+      },
+    });
   });
 
   it("updates blur inline and removes it from its section action", async () => {

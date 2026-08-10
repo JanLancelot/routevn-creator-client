@@ -134,6 +134,8 @@ const buildBackgroundDataFromState = (
   const selectedCustomTransform = store.selectCustomTransform?.();
   const selectedColorId = store.selectSelectedColor();
   const selectedOpacity = store.selectSelectedOpacity();
+  const selectedFlipX = store.selectSelectedFlipX();
+  const selectedFlipY = store.selectSelectedFlipY();
   const backgroundFilters = store.selectBackgroundFilters();
   const selectedBlur = store.selectSelectedBlurActionValue();
   const selectedAnimationMode = store.selectSelectedAnimationMode();
@@ -169,6 +171,14 @@ const buildBackgroundDataFromState = (
 
   if (hasBackgroundTarget && selectedOpacity !== undefined) {
     backgroundData.opacity = selectedOpacity;
+  }
+
+  if (hasBackgroundTarget && selectedFlipX !== undefined) {
+    backgroundData.flipX = selectedFlipX;
+  }
+
+  if (hasBackgroundTarget && selectedFlipY !== undefined) {
+    backgroundData.flipY = selectedFlipY;
   }
 
   if (hasBackgroundTarget && backgroundFilters !== undefined) {
@@ -288,6 +298,8 @@ export const handleBeforeMount = (deps) => {
     animationName,
     colorId,
     opacity,
+    flipX,
+    flipY,
     filters,
     blur,
     transformId,
@@ -309,6 +321,14 @@ export const handleBeforeMount = (deps) => {
     store.setSelectedOpacity({
       opacity,
     });
+  }
+
+  if (flipX !== undefined) {
+    store.setSelectedFlipX({ flipX });
+  }
+
+  if (flipY !== undefined) {
+    store.setSelectedFlipY({ flipY });
   }
 
   if (filters !== undefined) {
@@ -550,6 +570,20 @@ export const handleOptionsSectionAction = async (deps, payload) => {
     return;
   }
 
+  if (sectionId === "flip-x" && actionId === "remove") {
+    store.removeFlipXOption();
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  }
+
+  if (sectionId === "flip-y" && actionId === "remove") {
+    store.removeFlipYOption();
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  }
+
   if (sectionId !== "options" || actionId !== "add") {
     return;
   }
@@ -592,6 +626,20 @@ export const handleOptionsSectionAction = async (deps, payload) => {
       key: "blur",
     });
   }
+  if (!store.selectFlipXOptionEnabled()) {
+    items.push({
+      type: "item",
+      label: localizeCommandLineText("Flip X", copy),
+      key: "flip-x",
+    });
+  }
+  if (!store.selectFlipYOptionEnabled()) {
+    items.push({
+      type: "item",
+      label: localizeCommandLineText("Flip Y", copy),
+      key: "flip-y",
+    });
+  }
   if (items.length === 0) {
     return;
   }
@@ -616,6 +664,16 @@ export const handleOptionsSectionAction = async (deps, payload) => {
     });
   } else if (result?.item?.key === "blur") {
     store.showBlurOption();
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  } else if (result?.item?.key === "flip-x") {
+    store.showFlipXOption();
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  } else if (result?.item?.key === "flip-y") {
+    store.showFlipYOption();
     render();
     dispatchTemporaryPresentationStateChange(deps);
     return;
@@ -765,6 +823,20 @@ export const handleFormInputChange = (deps, payload) => {
     store.setSelectedOpacity({
       opacity: fieldValue,
     });
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  }
+
+  if (name === "flipX") {
+    store.setSelectedFlipX({ flipX: fieldValue });
+    render();
+    dispatchTemporaryPresentationStateChange(deps);
+    return;
+  }
+
+  if (name === "flipY") {
+    store.setSelectedFlipY({ flipY: fieldValue });
     render();
     dispatchTemporaryPresentationStateChange(deps);
     return;

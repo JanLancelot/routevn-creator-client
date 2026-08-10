@@ -16,6 +16,8 @@ import {
   setSelectedBlur,
   setSelectedBackgroundShaderAdjustment,
   setSelectedColor,
+  setSelectedFlipX,
+  setSelectedFlipY,
   setSelectedOpacity,
   setSelectedResource,
   setTempSelectedResource,
@@ -140,6 +142,12 @@ describe("commandLineBackground.store", () => {
     const blurField = viewData.dialogueForm.form.fields.find(
       (field) => field.name === "blur",
     );
+    const flipXField = viewData.dialogueForm.form.fields.find(
+      (field) => field.name === "flipX",
+    );
+    const flipYField = viewData.dialogueForm.form.fields.find(
+      (field) => field.name === "flipY",
+    );
     const continuityField = viewData.dialogueForm.form.fields.find(
       (field) => field.name === "playbackContinuity",
     );
@@ -188,6 +196,8 @@ describe("commandLineBackground.store", () => {
     expect(opacityField).toBeUndefined();
     expect(colorField).toBeUndefined();
     expect(blurField).toBeUndefined();
+    expect(flipXField).toBeUndefined();
+    expect(flipYField).toBeUndefined();
     expect(continuityField).toBeUndefined();
     expect(optionsSection).toEqual({
       type: "section",
@@ -203,6 +213,8 @@ describe("commandLineBackground.store", () => {
     expect(viewData.dialogueForm.defaultValues.transformId).toBe("bg-center");
     expect(viewData.dialogueForm.defaultValues.opacity).toBe(1);
     expect(viewData.dialogueForm.defaultValues.colorId).toBeUndefined();
+    expect(viewData.dialogueForm.defaultValues.flipX).toBeUndefined();
+    expect(viewData.dialogueForm.defaultValues.flipY).toBeUndefined();
     expect(viewData.backgroundColorOptionVisible).toBe(false);
     expect(viewData.dialogueForm.defaultValues.blur).toBeUndefined();
     expect(viewData.dialogueForm.defaultValues.animationId).toBeUndefined();
@@ -746,6 +758,38 @@ describe("commandLineBackground.store", () => {
     expect(viewData.dialogueForm.defaultValues.colorId).toBe("color-night");
   });
 
+  it("shows only enabled flips without redundant segmented controls", () => {
+    const state = createInitialState();
+
+    setSelectedFlipX({ state }, { flipX: true });
+    setSelectedFlipY({ state }, { flipY: false });
+
+    const viewData = selectViewData({ state });
+    const optionsSection = viewData.dialogueForm.form.fields.at(-1);
+    const flipXSection = optionsSection.fields.find(
+      (field) => field.id === "flip-x",
+    );
+    const flipYSection = optionsSection.fields.find(
+      (field) => field.id === "flip-y",
+    );
+
+    expect(flipXSection).toMatchObject({
+      type: "section",
+      label: "Flip X",
+      action: {
+        id: "remove",
+        icon: "x",
+        label: "Remove",
+      },
+      fields: [],
+    });
+    expect(flipYSection).toBeUndefined();
+    expect(viewData.dialogueForm.defaultValues).toMatchObject({
+      flipX: true,
+      flipY: false,
+    });
+  });
+
   it("uses selected background blur values when enabled", () => {
     const state = createInitialState();
 
@@ -845,6 +889,8 @@ describe("commandLineBackground.store", () => {
 
     setSelectedColor({ state }, { colorId: "color-night" });
     setSelectedOpacity({ state }, { opacity: 1 });
+    setSelectedFlipX({ state }, { flipX: true });
+    setSelectedFlipY({ state }, { flipY: true });
     for (const adjustment of COMMAND_LINE_SHADER_ADJUSTMENTS) {
       setSelectedBackgroundShaderAdjustment(
         { state },

@@ -109,6 +109,12 @@ const releaseItems = [
     path: "/project/releases/platform-details",
     icon: "info",
   },
+  {
+    id: "assetPackage",
+    label: "Asset Package",
+    path: "/project/asset-package",
+    icon: "folder",
+  },
 ];
 
 const settingsItems = [
@@ -185,6 +191,7 @@ const sectionsByVariant = {
 
 const resourceParentMapping = {
   "animation-editor": "animations",
+  "asset-package": "assetPackage",
   "audio-effects-editor": "audioEffects",
   "character-sprites": "characters",
   "layout-editor": "layouts",
@@ -299,16 +306,18 @@ export const selectItemById = ({ state }, { itemId } = {}) => {
   return getNavigationItems(state).find((item) => item.id === itemId);
 };
 
-export const selectViewData = ({ state, props = {} }) => {
+export const selectViewData = ({ state, props = {}, i18n }) => {
   const variant = props.variant ?? "assets";
   const sections = getSectionsByVariant(state)[variant] ?? assetsSections;
   const selectedResourceId = selectCurrentResourceId();
+  const resourceTypesCopy = i18n?.resourceTypes ?? {};
   const viewSections = sections.map((section) => ({
     ...section,
     items: section.items
       .filter((item) => !item.hidden)
       .map((item) => ({
         ...item,
+        label: resourceTypesCopy[item.id] ?? item.label,
         bgc: item.id === selectedResourceId ? "ac" : "bg",
       })),
   }));

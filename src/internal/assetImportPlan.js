@@ -484,6 +484,71 @@ const orderEntriesByDependencies = (entries) => {
   return ordered;
 };
 
+const createReviewSections = ({ manifest, resources }) => {
+  const resourceSourceIds = new Set(
+    resources.map((resource) => resource.sourceId),
+  );
+  const sections = [];
+
+  for (const resourceType of Object.keys(manifest.repository)) {
+    const collection = manifest.repository[resourceType];
+    if (!ASSET_PACKAGE_RESOURCE_CONFIG_BY_TYPE[resourceType] || !collection) {
+      continue;
+    }
+
+    const createReviewItems = (nodes, depth, parentSourceId) => {
+      const reviewItems = [];
+      let pendingResourceSourceIds = [];
+      const flushResources = () => {
+        if (pendingResourceSourceIds.length === 0) return;
+        const resourceGroup = {
+          kind: "resources",
+          sourceIds: pendingResourceSourceIds,
+          depth,
+        };
+        if (parentSourceId) resourceGroup.parentSourceId = parentSourceId;
+        reviewItems.push(resourceGroup);
+        pendingResourceSourceIds = [];
+      };
+
+      for (const node of nodes) {
+        const item = collection.items[node.id];
+        const sourceId = `${resourceType}:${node.id}`;
+        if (item.type !== "folder") {
+          if (resourceSourceIds.has(sourceId)) {
+            pendingResourceSourceIds.push(sourceId);
+          }
+          continue;
+        }
+
+        flushResources();
+        const childItems = createReviewItems(
+          node.children ?? [],
+          depth + 1,
+          sourceId,
+        );
+        if (childItems.length === 0) continue;
+        const folderGroup = {
+          kind: "folder",
+          sourceId,
+          name: item.name,
+          depth,
+        };
+        if (parentSourceId) folderGroup.parentSourceId = parentSourceId;
+        reviewItems.push(folderGroup);
+        reviewItems.push(...childItems);
+      }
+      flushResources();
+      return reviewItems;
+    };
+
+    const items = createReviewItems(collection.tree, 0, undefined);
+    if (items.length > 0) sections.push({ resourceType, items });
+  }
+
+  return sections;
+};
+
 export const createAssetImportPlan = ({
   manifest,
   manifestUrl,
@@ -651,6 +716,7 @@ export const createAssetImportPlan = ({
     sourceId,
     descriptor: structuredClone(manifest.repository.files.items[sourceId]),
   }));
+  const reviewSections = createReviewSections({ manifest, resources });
 
   return deepFreeze({
     planId,
@@ -660,6 +726,7 @@ export const createAssetImportPlan = ({
     package: structuredClone(manifest.package),
     entries: orderedEntries,
     resources,
+    reviewSections,
     files,
     previewFiles,
     warnings,

@@ -22,12 +22,9 @@ const createDeps = () => {
         openUrl: vi.fn(),
       },
       store: {
-        selectStep: vi.fn(() => "item"),
+        selectStep: vi.fn(() => "selection"),
         selectPlan: vi.fn(() => plan),
         selectReviewValues: vi.fn(() => ({})),
-        selectCurrentResourceIndex: vi.fn(() => 0),
-        openItemStep: vi.fn(),
-        openSelectionStep: vi.fn(),
         openSourceStep: vi.fn(),
         saveReviewValues: vi.fn(),
         setResourceSelected: vi.fn(),
@@ -63,7 +60,7 @@ describe("resource-import-dialog.handlers", () => {
     expect(deps.appService.openUrl).toHaveBeenCalledWith(url);
   });
 
-  it("maps the accumulated wizard values into validation and execution", async () => {
+  it("imports the selected resources directly from the selection page", async () => {
     const { deps } = createDeps();
     const values = {
       resource_0_include: true,
@@ -97,7 +94,7 @@ describe("resource-import-dialog.handlers", () => {
     expect(deps.dispatchEvent).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the first checked resource from the selection page", async () => {
+  it("imports only checked resources without opening item steps", async () => {
     const { deps, plan } = createDeps();
     plan.resources.push({
       sourceId: "transform.second",
@@ -107,69 +104,91 @@ describe("resource-import-dialog.handlers", () => {
     deps.store.selectReviewValues.mockReturnValue({
       resource_0_include: false,
       resource_1_include: true,
+      resource_1_name: "Second Transform",
+      resource_1_description: "Second description",
     });
     const values = {};
 
     await handleFormAction(deps, {
       _event: {
-        detail: { actionId: "select-continue", values, valid: true },
+        detail: { actionId: "import", values, valid: true },
       },
     });
 
-    expect(deps.store.openItemStep).toHaveBeenCalledWith({
-      values,
-      resourceIndex: 1,
-    });
+    expect(deps.projectService.executeResourceImportPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedResourceIds: ["transform.second"],
+        resourceNames: { "transform.second": "Second Transform" },
+        resourceDescriptions: {
+          "transform.second": "Second description",
+        },
+      }),
+    );
   });
 
   it("toggles a resource choice from the selection card", () => {
-    const { deps } = createDeps();
+    const { deps, plan } = createDeps();
+    plan.resources.push({
+      sourceId: "transform.second",
+      name: "Second Transform",
+    });
+    deps.store.selectReviewValues.mockReturnValue({
+      resource_1_include: false,
+    });
+    const card = {
+      dataset: { resourceSourceId: "transform.second" },
+      getAttribute: vi.fn(() => "true"),
+    };
 
     handleResourceSelectionToggle(deps, {
       _event: {
-        currentTarget: {
-          dataset: { resourceIndex: "1" },
-          getAttribute: vi.fn(() => "true"),
-        },
+        composedPath: vi.fn(() => [{}, card, {}]),
       },
     });
 
     expect(deps.store.setResourceSelected).toHaveBeenCalledWith({
-      resourceIndex: 1,
+      sourceId: "transform.second",
       selected: false,
     });
     expect(deps.render).toHaveBeenCalledTimes(1);
   });
 
-  it("does not toggle a required dependency", () => {
+  it("allows a required dependency to be deselected", () => {
     const { deps } = createDeps();
+    deps.store.selectReviewValues.mockReturnValue({
+      resource_0_include: false,
+    });
+    const card = {
+      dataset: { resourceSourceId: "transform.source" },
+      getAttribute: vi.fn(() => "true"),
+    };
 
     handleResourceSelectionToggle(deps, {
       _event: {
-        currentTarget: {
-          dataset: { resourceIndex: "0", selectionLocked: "true" },
-          getAttribute: vi.fn(() => "true"),
-        },
+        composedPath: vi.fn(() => [card, {}]),
       },
     });
 
-    expect(deps.store.setResourceSelected).not.toHaveBeenCalled();
-    expect(deps.render).not.toHaveBeenCalled();
+    expect(deps.store.setResourceSelected).toHaveBeenCalledWith({
+      sourceId: "transform.source",
+      selected: false,
+    });
+    expect(deps.render).toHaveBeenCalledTimes(1);
   });
 
   it("toggles a resource choice with Enter or Space", () => {
     const { deps } = createDeps();
-    const currentTarget = {
-      dataset: { resourceIndex: "0" },
+    const card = {
+      dataset: { resourceSourceId: "transform.source" },
       getAttribute: vi.fn(() => "false"),
     };
     const enterEvent = {
-      currentTarget,
+      composedPath: vi.fn(() => [card, {}]),
       key: "Enter",
       preventDefault: vi.fn(),
     };
     const spaceEvent = {
-      currentTarget,
+      composedPath: vi.fn(() => [card, {}]),
       key: " ",
       preventDefault: vi.fn(),
     };
@@ -180,14 +199,27 @@ describe("resource-import-dialog.handlers", () => {
     expect(enterEvent.preventDefault).toHaveBeenCalledTimes(1);
     expect(spaceEvent.preventDefault).toHaveBeenCalledTimes(1);
     expect(deps.store.setResourceSelected).toHaveBeenNthCalledWith(1, {
-      resourceIndex: 0,
+      sourceId: "transform.source",
       selected: true,
     });
     expect(deps.store.setResourceSelected).toHaveBeenNthCalledWith(2, {
-      resourceIndex: 0,
+      sourceId: "transform.source",
       selected: true,
     });
     expect(deps.render).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores clicks outside a resource card", () => {
+    const { deps } = createDeps();
+
+    handleResourceSelectionToggle(deps, {
+      _event: {
+        composedPath: vi.fn(() => [{}, {}]),
+      },
+    });
+
+    expect(deps.store.setResourceSelected).not.toHaveBeenCalled();
+    expect(deps.render).not.toHaveBeenCalled();
   });
 
   it("toggles all resource choices from the selection control", () => {
@@ -207,33 +239,6 @@ describe("resource-import-dialog.handlers", () => {
     expect(deps.render).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves the current item values when moving to the next item", async () => {
-    const { deps, plan } = createDeps();
-    plan.resources.push({
-      sourceId: "transform.second",
-      name: "Second Transform",
-    });
-    deps.store.selectReviewValues.mockReturnValue({
-      resource_0_include: true,
-      resource_1_include: true,
-    });
-    const values = {
-      resource_0_name: "Updated Transform",
-      resource_0_description: "Updated description",
-    };
-
-    await handleFormAction(deps, {
-      _event: {
-        detail: { actionId: "next", values, valid: true },
-      },
-    });
-
-    expect(deps.store.openItemStep).toHaveBeenCalledWith({
-      values,
-      resourceIndex: 1,
-    });
-  });
-
   it("keeps the selection page open when nothing is checked", async () => {
     const { deps, plan } = createDeps();
     plan.resources.push({
@@ -249,14 +254,16 @@ describe("resource-import-dialog.handlers", () => {
     await handleFormAction(deps, {
       _event: {
         detail: {
-          actionId: "select-continue",
+          actionId: "import",
           values: {},
           valid: true,
         },
       },
     });
 
-    expect(deps.store.openItemStep).not.toHaveBeenCalled();
+    expect(
+      deps.projectService.executeResourceImportPlan,
+    ).not.toHaveBeenCalled();
     expect(deps.store.saveReviewValues).toHaveBeenCalledWith({
       values: {},
     });

@@ -2,7 +2,6 @@ import { generateId } from "../../internal/id.js";
 
 const SOURCE_STEP = "source";
 const SELECTION_STEP = "selection";
-const ITEM_STEP = "item";
 
 const mapErrorMessage = (error, i18n = {}) => {
   const copy = i18n.resourceImport ?? {};
@@ -30,12 +29,7 @@ export const handleBeforeMount = (deps) => {
 export const handleOnUpdate = (deps, payload = {}) => {
   const oldProps = payload.oldProps ?? {};
   const newProps = payload.newProps ?? {};
-  if (
-    oldProps.open === newProps.open &&
-    oldProps.projectResolution === newProps.projectResolution
-  ) {
-    return;
-  }
+  if (oldProps.open === newProps.open) return;
   syncFromProps(deps, newProps);
   deps.render();
 };
@@ -83,11 +77,6 @@ const mergeReviewValues = (store, values) => {
   return mergedValues;
 };
 
-const getSelectedResourceIndexes = ({ plan, values }) =>
-  plan.resources
-    .map((_resource, index) => index)
-    .filter((index) => values[`resource_${index}_include`] === true);
-
 const handleSourceSubmit = async (deps, values) => {
   const { projectService, store, render } = deps;
   const previousSourceUrl = store.selectSourceValues()?.url?.trim();
@@ -126,7 +115,7 @@ const handleReviewSubmit = async (deps, values) => {
   if (validation.valid === false) {
     store.setError({
       error: mapErrorMessage(validation.error, deps.i18n),
-      step: ITEM_STEP,
+      step: SELECTION_STEP,
     });
     render();
     return;
@@ -147,7 +136,7 @@ const handleReviewSubmit = async (deps, values) => {
   if (result.valid === false) {
     store.setError({
       error: mapErrorMessage(result.error, deps.i18n),
-      step: ITEM_STEP,
+      step: SELECTION_STEP,
     });
     render();
     return;
@@ -167,28 +156,7 @@ export const handleFormAction = async (deps, payload) => {
     if (step === SELECTION_STEP) {
       store.openSourceStep({ values });
       render();
-      return;
     }
-    const plan = store.selectPlan();
-    const mergedValues = mergeReviewValues(store, values);
-    const selectedResourceIndexes = getSelectedResourceIndexes({
-      plan,
-      values: mergedValues,
-    });
-    const currentPosition = selectedResourceIndexes.indexOf(
-      store.selectCurrentResourceIndex(),
-    );
-    if (currentPosition > 0) {
-      store.openItemStep({
-        values,
-        resourceIndex: selectedResourceIndexes[currentPosition - 1],
-      });
-    } else if (plan.resources.length > 1) {
-      store.openSelectionStep({ values });
-    } else {
-      store.openSourceStep({ values });
-    }
-    render();
     return;
   }
   if (valid === false) return;
@@ -197,14 +165,15 @@ export const handleFormAction = async (deps, payload) => {
     await handleSourceSubmit(deps, values);
     return;
   }
-  if (actionId === "select-continue" && step === SELECTION_STEP) {
-    const plan = store.selectPlan();
+  if (actionId === "import" && step === SELECTION_STEP) {
     const mergedValues = mergeReviewValues(store, values);
-    const selectedResourceIndexes = getSelectedResourceIndexes({
-      plan,
-      values: mergedValues,
-    });
-    if (selectedResourceIndexes.length === 0) {
+    const hasSelectedResource = store
+      .selectPlan()
+      .resources.some(
+        (_resource, index) =>
+          mergedValues[`resource_${index}_include`] === true,
+      );
+    if (!hasSelectedResource) {
       store.saveReviewValues({ values });
       store.setError({
         error: mapErrorMessage(
@@ -219,54 +188,35 @@ export const handleFormAction = async (deps, payload) => {
       render();
       return;
     }
-    store.openItemStep({
-      values,
-      resourceIndex: selectedResourceIndexes[0],
-    });
-    render();
-    return;
-  }
-  if (actionId === "next" && step === ITEM_STEP) {
-    const plan = store.selectPlan();
-    const mergedValues = mergeReviewValues(store, values);
-    const selectedResourceIndexes = getSelectedResourceIndexes({
-      plan,
-      values: mergedValues,
-    });
-    const currentPosition = selectedResourceIndexes.indexOf(
-      store.selectCurrentResourceIndex(),
-    );
-    store.openItemStep({
-      values,
-      resourceIndex: selectedResourceIndexes[currentPosition + 1],
-    });
-    render();
-    return;
-  }
-  if (actionId === "import" && step === ITEM_STEP) {
-    await handleReviewSubmit(deps, mergeReviewValues(store, values));
+    await handleReviewSubmit(deps, mergedValues);
   }
 };
 
-const toggleResourceSelection = (deps, payload) => {
+const findResourceSelectionCard = (_event) =>
+  _event
+    .composedPath()
+    .find((target) => target?.dataset?.resourceSourceId !== undefined);
+
+const toggleResourceSelection = (deps, _event) => {
   const { store, render } = deps;
-  const { currentTarget } = payload._event;
-  if (currentTarget.dataset.selectionLocked === "true") return;
-  const resourceIndex = Number(currentTarget.dataset.resourceIndex);
-  const selected = currentTarget.getAttribute("aria-pressed") !== "true";
-  store.setResourceSelected({ resourceIndex, selected });
+  const card = findResourceSelectionCard(_event);
+  if (!card) return;
+  const sourceId = card.dataset.resourceSourceId;
+  const selected = card.getAttribute("aria-pressed") !== "true";
+  store.setResourceSelected({ sourceId, selected });
   render();
 };
 
 export const handleResourceSelectionToggle = (deps, payload) => {
-  toggleResourceSelection(deps, payload);
+  toggleResourceSelection(deps, payload._event);
 };
 
 export const handleResourceSelectionKeyDown = (deps, payload) => {
   const { _event } = payload;
   if (_event.key !== "Enter" && _event.key !== " ") return;
+  if (!findResourceSelectionCard(_event)) return;
   _event.preventDefault();
-  toggleResourceSelection(deps, payload);
+  toggleResourceSelection(deps, _event);
 };
 
 export const handleSelectionToggleAll = (deps, payload) => {

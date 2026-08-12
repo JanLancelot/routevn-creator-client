@@ -1,0 +1,14 @@
+componentName: rvn-resource-import-action
+propsSchema:
+  type: object
+  properties: {}
+events:
+  search-input:
+    type: object
+  tag-filter-change:
+    type: object
+  import-complete:
+    type: object
+methods:
+  type: object
+  properties: {}

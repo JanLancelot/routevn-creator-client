@@ -21,6 +21,30 @@ propsSchema:
                 type: number
               startDelayMs:
                 type: number
+              beginEffect:
+                type: object
+                required: [resourceId]
+                properties:
+                  resourceId:
+                    type: string
+                  playback:
+                    type: object
+                    properties:
+                      speed:
+                        type: number
+                        exclusiveMinimum: 0
+              endEffect:
+                type: object
+                required: [resourceId]
+                properties:
+                  resourceId:
+                    type: string
+                  playback:
+                    type: object
+                    properties:
+                      speed:
+                        type: number
+                        exclusiveMinimum: 0
         resourceId:
           type: string
           description: Legacy single-sound BGM resource
@@ -34,6 +58,18 @@ propsSchema:
         volume:
           type: number
           description: BGM channel volume from 0 to 100
+        audioEffects:
+          type: object
+          required: [resourceId]
+          properties:
+            resourceId:
+              type: string
+            playback:
+              type: object
+              properties:
+                speed:
+                  type: number
+                  exclusiveMinimum: 0
         startDelayMs:
           type: number
           description: Legacy single-sound start delay

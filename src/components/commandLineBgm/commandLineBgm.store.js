@@ -21,6 +21,7 @@ import { isTouchUiConfig } from "../../internal/ui/resourcePages/mobileResourceP
 
 const DEFAULT_CHANNEL_VOLUME = 75;
 const DEFAULT_SOUND_VOLUME = 100;
+const DEFAULT_AUDIO_EFFECT_PLAYBACK_SPEED = 1;
 const LEGACY_SOUND_ID = "default";
 
 const normalizeVolume = (volume, fallback) => {
@@ -31,6 +32,30 @@ const normalizeVolume = (volume, fallback) => {
 
   const nextVolume = parsedVolume > 100 ? parsedVolume / 10 : parsedVolume;
   return Math.max(0, Math.min(100, Math.round(nextVolume)));
+};
+
+const normalizeAudioEffectPlaybackSpeed = (speed) => {
+  const parsedSpeed = Number(speed);
+  if (!Number.isFinite(parsedSpeed) || parsedSpeed <= 0) {
+    return DEFAULT_AUDIO_EFFECT_PLAYBACK_SPEED;
+  }
+  return parsedSpeed;
+};
+
+const normalizeAudioEffectSelection = (selection) => {
+  if (!selection?.resourceId) {
+    return undefined;
+  }
+
+  const normalizedSelection = {
+    resourceId: selection.resourceId,
+  };
+  if (selection.playback?.speed !== undefined) {
+    normalizedSelection.playback = {
+      speed: normalizeAudioEffectPlaybackSpeed(selection.playback.speed),
+    };
+  }
+  return normalizedSelection;
 };
 
 const normalizeSounds = (sounds = []) => {
@@ -56,6 +81,12 @@ const normalizeSounds = (sounds = []) => {
     for (const field of ["muted", "pan", "playbackRate", "startAt", "endAt"]) {
       if (sound[field] !== undefined) {
         normalizedSound[field] = sound[field];
+      }
+    }
+    for (const field of ["beginEffect", "endEffect"]) {
+      const effect = normalizeAudioEffectSelection(sound[field]);
+      if (effect) {
+        normalizedSound[field] = effect;
       }
     }
     return normalizedSound;
@@ -93,11 +124,50 @@ const normalizeBgm = (bgm = {}) => {
     });
   }
 
+  const audioEffects = normalizeAudioEffectSelection(bgm.audioEffects);
+  if (audioEffects) {
+    normalizedBgm.audioEffects = audioEffects;
+  }
+
   sortAudioSoundsByStartDelay(normalizedBgm.sounds);
   return normalizedBgm;
 };
 
-const CHANNEL_FORM = {
+const createAudioEffectOptions = ({
+  items,
+  selectedResourceId,
+  allowedTypes,
+  copy,
+}) => {
+  const options = toFlatItems(items)
+    .filter(
+      (item) =>
+        item.type === "audioEffect" &&
+        allowedTypes.includes(item.audioEffect?.type),
+    )
+    .map((item) => ({
+      value: item.id,
+      label: item.name,
+      suffixText: localizeCommandLineText(
+        item.audioEffect?.type === "transition" ? "Transition" : "Update",
+        copy,
+      ),
+    }));
+
+  if (
+    selectedResourceId &&
+    !options.some((option) => option.value === selectedResourceId)
+  ) {
+    options.unshift({
+      value: selectedResourceId,
+      label: `Missing audio effect (${selectedResourceId})`,
+    });
+  }
+
+  return options;
+};
+
+const createChannelForm = ({ audioEffects, items, copy }) => ({
   fields: [
     {
       type: "row",
@@ -121,10 +191,81 @@ const CHANNEL_FORM = {
         },
       ],
     },
+    {
+      type: "row",
+      fields: [
+        {
+          name: "audioEffectId",
+          label: "Audio Effect",
+          type: "select",
+          clearable: true,
+          placeholder: "Select audio effect",
+          options: createAudioEffectOptions({
+            items,
+            selectedResourceId: audioEffects?.resourceId,
+            allowedTypes: ["transition", "update"],
+            copy,
+          }),
+        },
+        {
+          $when: "audioEffectId",
+          name: "audioEffectPlaybackSpeed",
+          label: "Playback Speed",
+          type: "slider-with-input",
+          min: 0.01,
+          max: 4,
+          step: 0.01,
+          required: true,
+        },
+        {
+          $when: "!audioEffectId",
+          type: "slot",
+          slot: "audioEffectPlaybackSpeedSpacer",
+        },
+      ],
+    },
   ],
+});
+
+const createBoundaryEffectFields = ({ boundary, sound, items, copy }) => {
+  const effectField = `${boundary}Effect`;
+  const effectIdField = `${effectField}Id`;
+  return {
+    type: "row",
+    fields: [
+      {
+        name: effectIdField,
+        label: boundary === "begin" ? "Begin Effect" : "End Effect",
+        type: "select",
+        clearable: true,
+        placeholder: "Select audio effect",
+        options: createAudioEffectOptions({
+          items,
+          selectedResourceId: sound?.[effectField]?.resourceId,
+          allowedTypes: ["update"],
+          copy,
+        }),
+      },
+      {
+        $when: effectIdField,
+        name: `${effectField}PlaybackSpeed`,
+        label: "Playback Speed",
+        type: "slider-with-input",
+        min: 0.01,
+        max: 4,
+        step: 0.01,
+        required: true,
+      },
+      {
+        $when: `!${effectIdField}`,
+        type: "slot",
+        slot: `${effectField}PlaybackSpeedSpacer`,
+      },
+    ],
+  };
 };
 
-const SOUND_FORM = {
+const createSoundForm = ({ sound, items, copy }) => ({
   fields: [
     {
       type: "row",
@@ -164,12 +305,15 @@ const SOUND_FORM = {
         },
       ],
     },
+    createBoundaryEffectFields({ boundary: "begin", sound, items, copy }),
+    createBoundaryEffectFields({ boundary: "end", sound, items, copy }),
   ],
-};
+});
 
 export const createInitialState = () => ({
   mode: "current",
   items: { items: {}, tree: [] },
+  audioEffectItems: { items: {}, tree: [] },
   tempSelectedResourceId: undefined,
   pendingInsertIndex: 0,
   pendingReplacementSoundId: undefined,
@@ -340,17 +484,40 @@ export const selectViewData = ({ state, i18n }) => {
     selectedSound === undefined;
   const hasSelection = channelSelected || selectedSound !== undefined;
   const channelName = localizeCommandLineText("BGM Channel", copy);
-  const form = selectedSound ? SOUND_FORM : CHANNEL_FORM;
+  const channelForm = createChannelForm({
+    audioEffects: state.bgm.audioEffects,
+    items: state.audioEffectItems,
+    copy,
+  });
+  const soundForm = createSoundForm({
+    sound: selectedSound,
+    items: state.audioEffectItems,
+    copy,
+  });
+  const form = selectedSound ? soundForm : channelForm;
+  const channelDefaultValues = {
+    interruption: state.bgm.interruption,
+    volume: state.bgm.volume,
+    audioEffectId: state.bgm.audioEffects?.resourceId,
+    audioEffectPlaybackSpeed: normalizeAudioEffectPlaybackSpeed(
+      state.bgm.audioEffects?.playback?.speed,
+    ),
+  };
   const defaultValues = selectedSound
     ? {
         startDelayMs: selectedSound.startDelayMs,
         loop: selectedSound.loop,
         volume: selectedSound.volume,
+        beginEffectId: selectedSound.beginEffect?.resourceId,
+        beginEffectPlaybackSpeed: normalizeAudioEffectPlaybackSpeed(
+          selectedSound.beginEffect?.playback?.speed,
+        ),
+        endEffectId: selectedSound.endEffect?.resourceId,
+        endEffectPlaybackSpeed: normalizeAudioEffectPlaybackSpeed(
+          selectedSound.endEffect?.playback?.speed,
+        ),
       }
-    : {
-        interruption: state.bgm.interruption,
-        volume: state.bgm.volume,
-      };
+    : channelDefaultValues;
 
   return {
     mode: state.mode,
@@ -385,17 +552,21 @@ export const selectViewData = ({ state, i18n }) => {
       : "",
     selectionName: selectedSound?.name ?? (channelSelected ? channelName : ""),
     selectionKey: selectedSound
-      ? `sound-${selectedSound.id}`
+      ? [
+          `sound-${selectedSound.id}`,
+          `begin-${selectedSound.beginEffect?.resourceId ?? "none"}`,
+          `end-${selectedSound.endEffect?.resourceId ?? "none"}`,
+        ].join("-")
       : channelSelected
         ? "channel"
         : "none",
     form: localizeCommandLineForm(form, copy),
     defaultValues,
-    channelForm: localizeCommandLineForm(CHANNEL_FORM, copy),
-    channelDefaultValues: {
-      interruption: state.bgm.interruption,
-      volume: state.bgm.volume,
-    },
+    channelFormKey: state.bgm.audioEffects?.resourceId
+      ? "channel-with-audio-effect"
+      : "channel-without-audio-effect",
+    channelForm: localizeCommandLineForm(channelForm, copy),
+    channelDefaultValues,
     tempSelectedResourceId: state.tempSelectedResourceId,
     searchQuery: state.searchQuery,
     searchPlaceholder: localizeCommandLineText("Search...", copy),
@@ -433,8 +604,12 @@ export const setMode = ({ state }, { mode } = {}) => {
   state.mode = mode;
 };
 
-export const setRepositoryState = ({ state }, { sounds } = {}) => {
-  state.items = sounds;
+export const setRepositoryState = (
+  { state },
+  { sounds, audioEffects } = {},
+) => {
+  state.items = sounds ?? { items: {}, tree: [] };
+  state.audioEffectItems = audioEffects ?? { items: {}, tree: [] };
 };
 
 export const clearSelectedSound = ({ state }, _payload = {}) => {
@@ -474,6 +649,67 @@ export const updateChannel = ({ state }, { values = {} } = {}) => {
   if (values.volume !== undefined) {
     state.bgm.volume = normalizeVolume(values.volume, DEFAULT_CHANNEL_VOLUME);
   }
+
+  const resourceChanged = Object.hasOwn(values, "audioEffectId");
+  const speedChanged = Object.hasOwn(values, "audioEffectPlaybackSpeed");
+  if (!resourceChanged && !speedChanged) {
+    return;
+  }
+
+  const resourceId = resourceChanged
+    ? values.audioEffectId
+    : state.bgm.audioEffects?.resourceId;
+  if (!resourceId) {
+    delete state.bgm.audioEffects;
+    return;
+  }
+
+  const isNewSelection =
+    resourceChanged && resourceId !== state.bgm.audioEffects?.resourceId;
+  const speed = isNewSelection
+    ? DEFAULT_AUDIO_EFFECT_PLAYBACK_SPEED
+    : speedChanged
+      ? values.audioEffectPlaybackSpeed
+      : state.bgm.audioEffects?.playback?.speed;
+  state.bgm.audioEffects = {
+    resourceId,
+    playback: {
+      speed: normalizeAudioEffectPlaybackSpeed(speed),
+    },
+  };
+};
+
+const updateSoundBoundaryEffect = (sound, values, boundary) => {
+  const effectField = `${boundary}Effect`;
+  const resourceField = `${effectField}Id`;
+  const speedField = `${effectField}PlaybackSpeed`;
+  const resourceChanged = Object.hasOwn(values, resourceField);
+  const speedChanged = Object.hasOwn(values, speedField);
+  if (!resourceChanged && !speedChanged) {
+    return;
+  }
+
+  const resourceId = resourceChanged
+    ? values[resourceField]
+    : sound[effectField]?.resourceId;
+  if (!resourceId) {
+    delete sound[effectField];
+    return;
+  }
+
+  const isNewSelection =
+    resourceChanged && resourceId !== sound[effectField]?.resourceId;
+  const speed = isNewSelection
+    ? DEFAULT_AUDIO_EFFECT_PLAYBACK_SPEED
+    : speedChanged
+      ? values[speedField]
+      : sound[effectField]?.playback?.speed;
+  sound[effectField] = {
+    resourceId,
+    playback: {
+      speed: normalizeAudioEffectPlaybackSpeed(speed),
+    },
+  };
 };
 
 export const updateSound = ({ state }, { soundId, values = {} } = {}) => {
@@ -493,6 +729,8 @@ export const updateSound = ({ state }, { soundId, values = {} } = {}) => {
     sound.startDelayMs = normalizeAudioStartDelayMs(values.startDelayMs);
     sortAudioSoundsByStartDelay(state.bgm.sounds);
   }
+  updateSoundBoundaryEffect(sound, values, "begin");
+  updateSoundBoundaryEffect(sound, values, "end");
 };
 
 export const connectSoundToPrevious = ({ state }, { soundId } = {}) => {

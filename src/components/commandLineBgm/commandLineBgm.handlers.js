@@ -48,6 +48,10 @@ const syncSelectedSoundForm = ({ refs, store }) => {
       startDelayMs: sound.startDelayMs,
       loop: sound.loop,
       volume: sound.volume,
+      beginEffectId: sound.beginEffect?.resourceId,
+      beginEffectPlaybackSpeed: sound.beginEffect?.playback?.speed ?? 1,
+      endEffectId: sound.endEffect?.resourceId,
+      endEffectPlaybackSpeed: sound.endEffect?.playback?.speed ?? 1,
     },
   });
 };
@@ -61,9 +65,9 @@ export const handleBeforeMount = (deps) => {
 export const handleAfterMount = async (deps) => {
   const { projectService, store, props, render } = deps;
   await projectService.ensureRepository();
-  const { sounds } = projectService.getState();
+  const { sounds, audioEffects } = projectService.getState();
 
-  store.setRepositoryState({ sounds });
+  store.setRepositoryState({ sounds, audioEffects });
   store.setBgm({ bgm: props.bgm });
   render();
 };
@@ -296,7 +300,11 @@ export const handleEdgeAddClick = (deps, payload) => {
 
 export const handleFormChange = (deps, payload) => {
   const { render, store } = deps;
-  const values = payload._event.detail.values;
+  const { name, value, values: currentValues } = payload._event.detail;
+  const values = Object.assign({}, currentValues);
+  if (name) {
+    values[name] = value;
+  }
   const selectedSoundId = store.selectSelectedSoundId();
 
   if (selectedSoundId === undefined) {

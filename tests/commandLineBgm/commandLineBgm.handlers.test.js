@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   handleButtonSelectClick,
+  handleAfterMount,
   handleChannelClick,
   handleChannelContextMenu,
   handleEdgeAddClick,
@@ -45,6 +46,33 @@ const sounds = {
   ],
 };
 
+const audioEffects = {
+  items: {
+    "channel-transition": {
+      id: "channel-transition",
+      type: "audioEffect",
+      name: "Channel Transition",
+      audioEffect: {
+        type: "transition",
+        prev: { fade: { keyframes: [{ value: 0, duration: 600 }] } },
+        next: { fade: { keyframes: [{ value: 100, duration: 900 }] } },
+      },
+    },
+    crossfade: {
+      id: "crossfade",
+      type: "audioEffect",
+      name: "Crossfade",
+      audioEffect: {
+        type: "update",
+        tween: {
+          volume: { keyframes: [{ value: 100, duration: 600 }] },
+        },
+      },
+    },
+  },
+  tree: [{ id: "channel-transition" }, { id: "crossfade" }],
+};
+
 const i18n = {
   resourcePages: {},
   sceneEditorPage: {},
@@ -83,11 +111,80 @@ const createStore = (state) => {
 
 const createState = () => {
   const state = bgmStore.createInitialState();
-  bgmStore.setRepositoryState({ state }, { sounds });
+  bgmStore.setRepositoryState({ state }, { sounds, audioEffects });
   return state;
 };
 
 describe("commandLineBgm.handlers", () => {
+  it("loads Sounds and Audio Effects before rendering the channel form", async () => {
+    const state = bgmStore.createInitialState();
+    const store = createStore(state);
+    const ensureRepository = vi.fn().mockResolvedValue(undefined);
+    const render = vi.fn();
+
+    await handleAfterMount({
+      projectService: {
+        ensureRepository,
+        getState: vi.fn(() => ({ sounds, audioEffects })),
+      },
+      store,
+      props: {
+        bgm: {
+          sounds: [{ id: "intro-clip", resourceId: "intro" }],
+        },
+      },
+      render,
+    });
+
+    expect(ensureRepository).toHaveBeenCalledOnce();
+    expect(state.items).toEqual(sounds);
+    expect(state.audioEffectItems).toEqual(audioEffects);
+    expect(state.bgm.sounds[0]).toMatchObject({
+      id: "intro-clip",
+      resourceId: "intro",
+    });
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("preserves a loaded channel update effect", async () => {
+    const state = bgmStore.createInitialState();
+    const updateAudioEffects = structuredClone(audioEffects);
+    updateAudioEffects.items["smooth-volume"] = {
+      id: "smooth-volume",
+      type: "audioEffect",
+      name: "Smooth Volume",
+      audioEffect: {
+        type: "update",
+        tween: {
+          volume: { keyframes: [{ value: 50, duration: 500 }] },
+        },
+      },
+    };
+    updateAudioEffects.tree.push({ id: "smooth-volume" });
+
+    await handleAfterMount({
+      projectService: {
+        ensureRepository: vi.fn().mockResolvedValue(undefined),
+        getState: vi.fn(() => ({
+          sounds,
+          audioEffects: updateAudioEffects,
+        })),
+      },
+      store: createStore(state),
+      props: {
+        bgm: {
+          sounds: [{ id: "main", resourceId: "intro" }],
+          audioEffects: { resourceId: "smooth-volume" },
+        },
+      },
+      render: vi.fn(),
+    });
+
+    expect(state.bgm.audioEffects).toEqual({
+      resourceId: "smooth-volume",
+    });
+  });
+
   it("updates channel controls while the channel is selected", () => {
     const state = createState();
     const render = vi.fn();
@@ -113,6 +210,161 @@ describe("commandLineBgm.handlers", () => {
       sounds: [],
     });
     expect(render).toHaveBeenCalledOnce();
+  });
+
+  it("updates and clears a channel Audio Effect", () => {
+    const state = createState();
+    const render = vi.fn();
+    const store = createStore(state);
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            values: {
+              audioEffectId: "channel-transition",
+              audioEffectPlaybackSpeed: 0.01,
+            },
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.audioEffects).toEqual({
+      resourceId: "channel-transition",
+      playback: { speed: 1 },
+    });
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            name: "audioEffectId",
+            value: undefined,
+            values: {},
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.audioEffects).toBeUndefined();
+    expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("updates begin and end effects on the selected sound", () => {
+    const state = createState();
+    const store = createStore(state);
+    const render = vi.fn();
+    store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            values: {
+              beginEffectId: "crossfade",
+              beginEffectPlaybackSpeed: 0.01,
+              endEffectId: "crossfade",
+              endEffectPlaybackSpeed: 0.01,
+            },
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.audioEffects).toBeUndefined();
+    expect(state.bgm.sounds[0]).toMatchObject({
+      beginEffect: {
+        resourceId: "crossfade",
+        playback: { speed: 1 },
+      },
+      endEffect: {
+        resourceId: "crossfade",
+        playback: { speed: 1 },
+      },
+    });
+    expect(render).toHaveBeenCalledOnce();
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            values: {
+              beginEffectPlaybackSpeed: 1.25,
+              endEffectPlaybackSpeed: 0.75,
+            },
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.sounds[0]).toMatchObject({
+      beginEffect: {
+        resourceId: "crossfade",
+        playback: { speed: 1.25 },
+      },
+      endEffect: {
+        resourceId: "crossfade",
+        playback: { speed: 0.75 },
+      },
+    });
+    expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears sound boundary effects omitted from the form values", () => {
+    const state = createState();
+    const store = createStore(state);
+    const render = vi.fn();
+    store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
+    store.updateSound({
+      soundId: "intro-clip",
+      values: {
+        beginEffectId: "crossfade",
+        endEffectId: "crossfade",
+      },
+    });
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            name: "beginEffectId",
+            value: undefined,
+            values: {
+              endEffectId: "crossfade",
+              endEffectPlaybackSpeed: 1,
+            },
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.sounds[0].beginEffect).toBeUndefined();
+    expect(state.bgm.sounds[0].endEffect).toEqual({
+      resourceId: "crossfade",
+      playback: { speed: 1 },
+    });
+
+    handleFormChange(
+      { store, render },
+      {
+        _event: {
+          detail: {
+            name: "endEffectId",
+            value: undefined,
+            values: {},
+          },
+        },
+      },
+    );
+
+    expect(state.bgm.sounds[0].endEffect).toBeUndefined();
+    expect(render).toHaveBeenCalledTimes(2);
   });
 
   it("updates only the selected clip timing, loop, and volume", () => {
@@ -509,6 +761,10 @@ describe("commandLineBgm.handlers", () => {
         startDelayMs: 2000,
         loop: false,
         volume: 100,
+        beginEffectId: undefined,
+        beginEffectPlaybackSpeed: 1,
+        endEffectId: undefined,
+        endEffectPlaybackSpeed: 1,
       },
     });
     expect(render).toHaveBeenCalledTimes(2);
@@ -519,6 +775,19 @@ describe("commandLineBgm.handlers", () => {
     const store = createStore(state);
     const dispatchEvent = vi.fn();
     store.insertSound({ id: "intro-clip", resourceId: "intro", index: 0 });
+    store.updateSound({
+      soundId: "intro-clip",
+      values: {
+        beginEffectId: "crossfade",
+        endEffectId: "crossfade",
+      },
+    });
+    store.updateSound({
+      soundId: "intro-clip",
+      values: {
+        beginEffectPlaybackSpeed: 1.5,
+      },
+    });
 
     handleSubmitClick(
       { store, dispatchEvent },
@@ -538,6 +807,14 @@ describe("commandLineBgm.handlers", () => {
             loop: false,
             volume: 100,
             startDelayMs: 0,
+            beginEffect: {
+              resourceId: "crossfade",
+              playback: { speed: 1.5 },
+            },
+            endEffect: {
+              resourceId: "crossfade",
+              playback: { speed: 1 },
+            },
           },
         ],
       },

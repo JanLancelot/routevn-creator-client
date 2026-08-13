@@ -5,6 +5,7 @@ import {
 } from "../../internal/runtime/graphicsEngineRuntime.js";
 import { createFileExplorerKeyboardScopeHandlers } from "../../internal/ui/fileExplorerKeyboardScope.js";
 import { createCatalogPageHandlers } from "../../internal/ui/resourcePages/catalog/createCatalogPageHandlers.js";
+import { forwardFormSubmitOnEnter } from "../../internal/ui/resourcePages/formSubmitKeyDown.js";
 import { appendTagIdToForm } from "../../internal/ui/resourcePages/tags.js";
 import { runResourcePageMutation } from "../../internal/ui/resourcePages/resourcePageErrors.js";
 import {
@@ -535,6 +536,8 @@ const openTransformEditDialog = async ({ deps, itemId } = {}) => {
     return;
   }
 
+  deps.store.setSelectedItemId({ itemId, suppressMobileDetailSheet: true });
+
   await openTransformDialog({
     deps,
     editMode: true,
@@ -732,6 +735,25 @@ export const handleTransformFormActionClick = async (deps, payload) => {
   store.closeTransformFormDialog();
   await handleDataChanged(deps);
 };
+
+export const handleTransformSubmitClick = async (deps) => {
+  const { transformForm } = deps.refs;
+  await handleTransformFormActionClick(deps, {
+    _event: {
+      detail: {
+        actionId: "submit",
+        values: transformForm.getValues(),
+      },
+    },
+  });
+};
+
+export const handleTransformFormSubmitKeyDown = (deps, payload) =>
+  forwardFormSubmitOnEnter({
+    deps,
+    payload,
+    submit: handleTransformSubmitClick,
+  });
 
 export const handleTransformFormChange = async (deps, payload) => {
   const { store } = deps;

@@ -36,6 +36,16 @@ const getAnimationTypeLabel = (animationType, copy = {}) => {
 
 const createEditForm = (copy = {}) => ({
   title: copy.editTitle ?? "Edit Animation",
+  actions: {
+    buttons: [
+      {
+        id: "submit",
+        variant: "pr",
+        validate: true,
+        label: copy.updateButton ?? "Update",
+      },
+    ],
+  },
   fields: [
     {
       name: "name",
@@ -55,20 +65,20 @@ const createEditForm = (copy = {}) => ({
       addOptionLabel: copy.addTagOption,
     }),
   ],
-  actions: {
-    layout: "",
-    buttons: [
-      {
-        id: "submit",
-        variant: "pr",
-        label: copy.updateButton ?? "Update Animation",
-      },
-    ],
-  },
 });
 
 const createAddForm = (copy = {}) => ({
   title: copy.addTitle ?? "Add Animation",
+  actions: {
+    buttons: [
+      {
+        id: "submit",
+        variant: "pr",
+        validate: true,
+        label: copy.continueButton ?? "Continue",
+      },
+    ],
+  },
   fields: [
     {
       name: "name",
@@ -105,16 +115,6 @@ const createAddForm = (copy = {}) => ({
       ],
     },
   ],
-  actions: {
-    layout: "",
-    buttons: [
-      {
-        id: "submit",
-        variant: "pr",
-        label: copy.continueButton ?? "Continue",
-      },
-    ],
-  },
 });
 
 const createAnimationExplorerItemContextMenuItems = (copy = {}) => [

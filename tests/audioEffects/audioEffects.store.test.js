@@ -59,8 +59,10 @@ describe("audioEffects.store", () => {
           animationType: "transition",
           audioEffectTypeLabel: "Transition",
           transitionTimelineDuration: 900,
-          transitionPreviousLabel: "Previous",
-          transitionNextLabel: "Next",
+          transitionOutgoingLabel: "Outgoing",
+          transitionIncomingLabel: "Incoming",
+          maskTimelineRows: [],
+          maskTimelineDefaultValues: {},
           prevProperties: {
             fade: {
               label: "Fade",
@@ -77,7 +79,7 @@ describe("audioEffects.store", () => {
               ],
             },
           },
-          summary: "Previous: 600ms · Next: 900ms",
+          summary: "Outgoing: 600ms · Incoming: 900ms",
         }),
         expect.objectContaining({
           id: "smooth",
@@ -97,7 +99,7 @@ describe("audioEffects.store", () => {
     );
     expect(viewData).toMatchObject({
       selectedAudioEffectTypeLabel: "Transition",
-      selectedAudioEffectSummary: "Previous: 600ms · Next: 900ms",
+      selectedAudioEffectSummary: "Outgoing: 600ms · Incoming: 900ms",
       selectedResourceId: "audioEffects",
       resourceCategory: "animatedAssets",
       openButton: "Open",

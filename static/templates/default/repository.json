@@ -758,7 +758,7 @@
       "ZvJUEaaujuQj": {
         "id": "ZvJUEaaujuQj",
         "type": "image",
-        "name": "swipe",
+        "name": "wipe",
         "width": 1920,
         "height": 1080,
         "fileId": "Wt2LWBPXdux2",
@@ -888,7 +888,7 @@
       "zcPUL4myXFeY": {
         "id": "zcPUL4myXFeY",
         "type": "animation",
-        "name": "Fade 1s",
+        "name": "Crossfade",
         "description": "",
         "animation": {
           "type": "transition",
@@ -916,6 +916,46 @@
                     "value": 1,
                     "easing": "linear",
                     "relative": false
+                  }
+                ],
+                "initialValue": 0
+              }
+            }
+          }
+        }
+      },
+      "Bc1xLFyHF4Hs": {
+        "id": "Bc1xLFyHF4Hs",
+        "type": "animation",
+        "name": "Fade-through",
+        "description": "",
+        "animation": {
+          "type": "transition",
+          "prev": {
+            "tween": {
+              "alpha": {
+                "keyframes": [
+                  {
+                    "duration": 1000,
+                    "value": 0,
+                    "easing": "easeInQuad",
+                    "relative": false
+                  }
+                ],
+                "initialValue": 1
+              }
+            }
+          },
+          "next": {
+            "tween": {
+              "alpha": {
+                "keyframes": [
+                  {
+                    "duration": 1000,
+                    "value": 1,
+                    "easing": "easeOutQuad",
+                    "relative": false,
+                    "delay": 1000
                   }
                 ],
                 "initialValue": 0
@@ -974,6 +1014,9 @@
             "id": "zcPUL4myXFeY"
           },
           {
+            "id": "Bc1xLFyHF4Hs"
+          },
+          {
             "id": "HRY5hwWkqS5K"
           }
         ]
@@ -983,6 +1026,139 @@
         "children": [
           {
             "id": "z8EhCjJBErGf"
+          }
+        ]
+      }
+    ]
+  },
+  "audioEffects": {
+    "items": {
+      "RwTkafZDHjgk": {
+        "id": "RwTkafZDHjgk",
+        "type": "folder",
+        "name": "Default"
+      },
+      "Wd6F6UwPiydF": {
+        "id": "Wd6F6UwPiydF",
+        "type": "audioEffect",
+        "name": "Fade in 1s",
+        "description": "",
+        "audioEffect": {
+          "type": "update",
+          "tween": {
+            "volume": {
+              "keyframes": [
+                {
+                  "startValue": 0,
+                  "value": 100,
+                  "duration": 1000,
+                  "easing": "linear"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "VihkNgdrSQD9": {
+        "id": "VihkNgdrSQD9",
+        "type": "audioEffect",
+        "name": "Fade out 1s",
+        "description": "",
+        "audioEffect": {
+          "type": "update",
+          "tween": {
+            "volume": {
+              "keyframes": [
+                {
+                  "startValue": 100,
+                  "value": 0,
+                  "duration": 1000,
+                  "easing": "linear"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "a65dzppVeTPc": {
+        "id": "a65dzppVeTPc",
+        "type": "audioEffect",
+        "name": "Crossfade 1s",
+        "description": "",
+        "audioEffect": {
+          "type": "transition",
+          "prev": {
+            "fade": {
+              "keyframes": [
+                {
+                  "value": 0,
+                  "duration": 1000,
+                  "easing": "linear"
+                }
+              ]
+            }
+          },
+          "next": {
+            "fade": {
+              "keyframes": [
+                {
+                  "value": 100,
+                  "duration": 1000,
+                  "easing": "linear"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "iJ62KMzKszTq": {
+        "id": "iJ62KMzKszTq",
+        "type": "audioEffect",
+        "name": "Fade-through 1s",
+        "description": "",
+        "audioEffect": {
+          "type": "transition",
+          "prev": {
+            "fade": {
+              "keyframes": [
+                {
+                  "value": 0,
+                  "duration": 500,
+                  "easing": "linear"
+                }
+              ]
+            }
+          },
+          "next": {
+            "fade": {
+              "keyframes": [
+                {
+                  "value": 100,
+                  "delay": 500,
+                  "duration": 500,
+                  "easing": "linear"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "tree": [
+      {
+        "id": "RwTkafZDHjgk",
+        "children": [
+          {
+            "id": "Wd6F6UwPiydF"
+          },
+          {
+            "id": "VihkNgdrSQD9"
+          },
+          {
+            "id": "a65dzppVeTPc"
+          },
+          {
+            "id": "iJ62KMzKszTq"
           }
         ]
       }

@@ -53,7 +53,7 @@ sdk.dir=/Users/<user>/Android/Sdk
 
 ## Endpoint Configuration
 
-`static/android/index.html` defines Android runtime endpoints through
+`static/public/android-env.js` defines Android runtime endpoints through
 `window.env`:
 
 - `ROUTEVN_API_ENDPOINT`
@@ -88,8 +88,8 @@ This gives the local bundle an HTTPS origin while serving packaged app files.
 
 ### Android JS Watch Mode
 
-Debug Android builds load the local Android dev server instead of packaged
-assets:
+Debug Android builds use packaged assets by default, just like release builds.
+The local Android dev server is an explicit launch-time opt-in:
 
 ```text
 http://127.0.0.1:3001/android/index.html
@@ -109,8 +109,17 @@ bun run watch:android
 
 `watch:android` prepares `_site`, runs `adb reverse tcp:3001 tcp:3001` when a
 device is connected, and starts `rtgl fe watch` with `src/setup.android.js`.
-After that, JS, YAML view, store, handler, i18n, and setup changes are served
-from the dev server. Refresh or relaunch the app without reinstalling the APK.
+After the server is ready, launch the installed debug app with the explicit
+development extra:
+
+```bash
+adb shell am start -S -n com.routevn.creator/.MainActivity \
+  --ez routevnUseDevServer true
+```
+
+JS, YAML view, store, handler, i18n, and setup changes are then served from the
+dev server. A normal launcher start does not set this extra and uses packaged
+JavaScript instead.
 
 If multiple Android devices are connected, set `ANDROID_SERIAL` before running
 the watch command:
@@ -119,8 +128,7 @@ the watch command:
 ANDROID_SERIAL=<device-serial> bun run watch:android
 ```
 
-Release builds still load packaged assets through `WebViewAssetLoader`. Debug
-builds are dev-server shells by default.
+Release builds always load packaged assets through `WebViewAssetLoader`.
 
 ### Native Shell And Packaged Assets
 
@@ -130,8 +138,8 @@ Build Android web assets:
 bun run build:android
 ```
 
-Build the debug APK. Debug builds load the dev server and use these packaged
-assets only as fallback development artifacts:
+Build the debug APK. Debug builds use these packaged assets unless explicitly
+launched with the development intent extra described above:
 
 ```bash
 cd android/routevn
@@ -186,10 +194,46 @@ The native bridge in `MainActivity.java` handles:
 
 - route back-state updates and Android back dispatch
 - external URL opening
-- SQLite open/query/exec/close
+- named global app-database operations
+- project-only SQLite open/query/exec/close
 - project file read/write/metadata
 - download writes
 - Android document picker results
+
+## Private Storage Layout
+
+The global app database uses Android's standard database directory, while every
+project is one self-contained directory under the app-private files directory:
+
+This is RouteVN Creator's first supported Android storage layout. No released
+Android build used another storage root, so there is no upgrade migration.
+
+```text
+databases/app.db
+
+files/projects/<projectId>/
+  project.db
+  project.db-wal
+  project.db-shm
+  files/<fileId>
+  file-metadata/<fileId>.mime
+```
+
+`databases/` and `files/` in this diagram are Android backup domains, not
+sibling directories returned by the same API. `app.db` is resolved with
+`getDatabasePath("app.db")`; project roots are resolved below `getFilesDir()`.
+
+The native database contract remains deliberately narrow:
+
+- the global `app.db` is accessed only through named key/value and event
+  operations
+- the raw SQLite bridge accepts only
+  `projects/<projectId>/project.db`, one statement per request, and the query,
+  schema, transaction, and write statement classes used by the project store
+- all other database paths and statement classes are rejected
+
+Project discovery requires both `project.db` and `files/`, so incomplete
+directories are not listed as valid projects.
 
 Project files are stored in app-private storage and served back through
 `/android-files/`. For media assets, Android returns typed URLs such as:
@@ -200,6 +244,58 @@ Project files are stored in app-private storage and served back through
 
 The typed filename lets Pixi choose the right image/video parser while the
 native handler maps the request back to the extensionless stored project file.
+The file handler accepts only project-asset and picker-file routes; database,
+WAL, metadata, staging, and unrelated private paths are not served.
+
+## WebView Security Boundary
+
+The WebView does not use `addJavascriptInterface`. Native operations are
+provided through AndroidX `addWebMessageListener` with a versioned asynchronous
+request protocol. The native listener accepts only main-frame messages from:
+
+- `https://appassets.androidplatform.net` in every build
+- `http://127.0.0.1:3001` only when a debug build is explicitly launched with
+  `routevnUseDevServer=true`
+
+There is no wildcard-origin or compatibility fallback. A WebView without the
+origin-scoped message-listener feature fails closed instead of exposing a less
+safe bridge.
+
+The Android document uses a restrictive Content Security Policy: scripts must
+come from the document origin, frames and objects are disabled, and inline
+scripts are not permitted. Internal-file CORS responses name the one expected
+origin for the build. Direct `file://` and `content://` access, automatic
+JavaScript windows, and third-party cookies are disabled.
+
+Authentication and refresh tokens are removed from the serialized
+`userConfig` value before `app.db` is written. The opaque session JSON is
+encrypted with an AES-GCM key generated in Android Keystore; only ciphertext is
+stored in the excluded `auth-secrets` preferences file. The session is merged
+back into the in-memory config only when the app reads its named global state.
+
+## Backup And Device Transfer
+
+`android:allowBackup` is enabled as the master switch, but RouteVN does not use
+Android Auto Backup for cloud project recovery. Projects commonly contain media
+and can exceed Auto Backup's 25 MB per-app cloud quota.
+
+The configured policy is:
+
+- cloud backup contains no current RouteVN app data
+- Android 12+ device-to-device transfer includes only the complete `projects/`
+  root
+- Android 9–11 includes `projects/` only when the backup transport declares a
+  device-to-device transfer
+- Android 7–8 backs up no RouteVN app data because those versions cannot apply
+  the device-to-device-only condition
+- the global `app.db` and Keystore-encrypted authentication secret are never
+  backed up or transferred
+- picker files, staging files, preferences, and other private files are not
+  backed up or transferred
+
+Manual project export remains the recovery mechanism until RouteVN provides a
+project-aware cloud backup or synchronization service. Android device transfer
+is a convenience and must not be presented as the user's only backup.
 
 ## Android Back
 
@@ -267,11 +363,11 @@ can miss Android-specific parser, layout, asset, and bridge behavior.
   changes should refresh from `http://127.0.0.1:3001/android/index.html`
   without reinstalling the APK.
 - For packaged-asset validation, build a release bundle with `bun run
-  android:bundle`. A native release build without rebuilding Android web assets
+android:bundle`. A native release build without rebuilding Android web assets
   can package stale JavaScript.
-- If a debug app shows a WebView network error on launch, start
-  `bun run watch:android` and confirm `adb reverse tcp:3001 tcp:3001` is active
-  for the device.
+- If an explicitly dev-server-launched app shows a WebView network error,
+  confirm `bun run watch:android` is running and
+  `adb reverse tcp:3001 tcp:3001` is active for the device.
 - Android builds must use the local `rtgl` dev dependency through
   `scripts/build.sh`, not a globally installed `rtgl` CLI. The local build
   preserves the repo's `rettangoli.config.yaml` options, including `i18n`.
@@ -279,7 +375,7 @@ can miss Android-specific parser, layout, asset, and bridge behavior.
   blank screens were caused by frontend render errors such as missing i18n
   catalogs or Rettangoli parser failures, not native Activity failures.
 - The Android build log should show `Building frontend bundle with
-  src/setup.android.js` and include the configured `i18n` block. If it does not,
+src/setup.android.js` and include the configured `i18n` block. If it does not,
   the APK may not match the web bundle contract expected by the app.
 
 ### WebView Validation
@@ -396,6 +492,7 @@ same device, same project, and same navigation path. Otherwise it is easy to
   An unquoted value such as `h=${scrollBottomPadding}` can expand to
   `h=calc(96px + env(safe-area-inset-bottom))`, which the Rettangoli selector
   parser treats as invalid separate tokens.
+
 - A `style="height: ${scrollBottomPadding};"` spacer can collapse in some
   nested resource scroll layouts. The `h` attribute path matches established
   app spacer usage and produced a real measured `96px` spacer on Android.

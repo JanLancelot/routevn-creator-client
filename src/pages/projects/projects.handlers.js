@@ -826,6 +826,10 @@ export const handleProjectsClick = async (deps, payload) => {
 export const handleProjectContextMenu = (deps, payload) => {
   const { appService, store, render, i18n } = deps;
   const copy = selectProjectsPageCopy(i18n);
+  const projectActionLabel =
+    appService.getPlatform() === "android"
+      ? copy.deleteButton
+      : copy.removeButton;
   payload._event.preventDefault();
 
   const projectId = getProjectIdFromEvent(payload._event);
@@ -843,7 +847,7 @@ export const handleProjectContextMenu = (deps, payload) => {
       y: payload._event.clientY,
       scope: "local",
       projectPath,
-      items: [{ label: copy.removeButton, type: "item", value: "delete" }],
+      items: [{ label: projectActionLabel, type: "item", value: "delete" }],
     };
 
     store.openDropdownMenu(menuPayload);
@@ -857,7 +861,7 @@ export const handleProjectContextMenu = (deps, payload) => {
     scope: "local",
     projectId: projectId,
     projectPath,
-    items: [{ label: copy.removeButton, type: "item", value: "delete" }],
+    items: [{ label: projectActionLabel, type: "item", value: "delete" }],
   };
 
   store.openDropdownMenu(menuPayload);
@@ -1001,11 +1005,41 @@ export const handleAddMemberFormAction = async (deps, payload) => {
 export const handleDeleteDialogConfirm = async (deps) => {
   const { appService, projectService, store, render, i18n } = deps;
   const copy = selectProjectsPageCopy(i18n);
+  const isAndroid = appService.getPlatform() === "android";
   const projectId = store.selectDeleteDialogProjectId();
   const projectPath = store.selectDeleteDialogProjectPath();
-  if (!projectId && !projectPath) {
+  if (isAndroid && store.selectDeleteDialogConfirmationText() !== "Delete") {
+    return;
+  }
+  if ((isAndroid && !projectId) || (!isAndroid && !projectId && !projectPath)) {
     store.closeDeleteDialog();
     render();
+    return;
+  }
+
+  if (isAndroid) {
+    try {
+      await projectService.releaseProjectRuntime(projectId);
+      await appService.deleteProject(projectId);
+    } catch {
+      appService.showAlert({
+        message: copy.failedDeleteProject,
+      });
+      render();
+      return;
+    }
+
+    store.removeProject({ projectId });
+    store.closeDeleteDialog();
+    render();
+
+    try {
+      await appService.removeProjectEntry(projectId);
+    } catch {
+      appService.showAlert({
+        message: copy.failedRemoveProject,
+      });
+    }
     return;
   }
 
@@ -1021,14 +1055,21 @@ export const handleDeleteDialogConfirm = async (deps) => {
       await appService.removeProjectEntry(projectId);
       store.removeProject({ projectId });
     }
+    store.closeDeleteDialog();
   } catch {
     appService.showAlert({
       message: copy.failedRemoveProject,
     });
-  } finally {
-    store.closeDeleteDialog();
-    render();
   }
+  render();
+};
+
+export const handleDeleteConfirmationInput = (deps, payload) => {
+  const { store, render } = deps;
+  store.setDeleteDialogConfirmationText({
+    confirmationText: payload._event.detail.value,
+  });
+  render();
 };
 
 export const handleDropdownMenuClickItem = async (deps, payload) => {

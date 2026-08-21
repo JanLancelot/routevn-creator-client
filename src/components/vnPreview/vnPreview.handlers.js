@@ -19,11 +19,22 @@ import {
   resolveSceneIdForSectionId,
   withPreviewEntryPoint,
 } from "./support/vnPreviewProjectData.js";
+import { remapRotatedPreviewEventCoordinates } from "./support/vnPreviewPointerCoordinates.js";
 import { selectSceneEditorCopy } from "../../internal/ui/sceneEditor/sceneEditorCopy.js";
 
 const FORWARDED_PREVIEW_KEY_EVENT = "__rvnForwardedPreviewKeyEvent";
 const PREVIEW_FORWARDED_KEYS = new Set(["Enter"]);
 const PREVIEW_LEGACY_KEY_CODE_BY_KEY = new Map([["Enter", 13]]);
+const PREVIEW_COORDINATE_EVENT_TYPES = [
+  "pointerdown",
+  "pointermove",
+  "pointerup",
+  "pointerover",
+  "pointerout",
+  "pointerleave",
+  "pointercancel",
+  "wheel",
+];
 
 const focusPreviewSurface = (refs) => {
   const previewSurface = refs?.previewSurface;
@@ -585,7 +596,9 @@ const createBeforeHandleActionsHook = (
 };
 
 export const handleBeforeMount = (deps) => {
-  const { dispatchEvent, store, graphicsService, refs, subject } = deps;
+  const { dispatchEvent, store, graphicsService, refs, subject, uiConfig } =
+    deps;
+  store.setUiConfig({ uiConfig });
   function handleKeyDown(event) {
     if (event.key !== "Escape") {
       if (
@@ -611,6 +624,16 @@ export const handleBeforeMount = (deps) => {
     }
   }
 
+  function handlePreviewCoordinateEvent(event) {
+    if (!store.selectIsPreviewRotated()) {
+      return;
+    }
+
+    const canvas = graphicsService.getCanvas?.();
+    const canvasRect = canvas?.getBoundingClientRect?.();
+    remapRotatedPreviewEventCoordinates(event, canvasRect);
+  }
+
   const nativeBackSubscription = subject
     ?.pipe(
       filter(({ action }) => action === "app.nativeBack"),
@@ -623,6 +646,9 @@ export const handleBeforeMount = (deps) => {
 
   window.addEventListener("keydown", handleKeyDown, true);
   window.addEventListener("keyup", handleKeyUp, true);
+  PREVIEW_COORDINATE_EVENT_TYPES.forEach((eventType) => {
+    window.addEventListener(eventType, handlePreviewCoordinateEvent, true);
+  });
 
   return () => {
     store.setAssetLoading({ isLoading: false });
@@ -632,7 +658,20 @@ export const handleBeforeMount = (deps) => {
     nativeBackSubscription?.unsubscribe();
     window.removeEventListener("keydown", handleKeyDown, true);
     window.removeEventListener("keyup", handleKeyUp, true);
+    PREVIEW_COORDINATE_EVENT_TYPES.forEach((eventType) => {
+      window.removeEventListener(eventType, handlePreviewCoordinateEvent, true);
+    });
   };
+};
+
+export const handleRotatePreview = (deps, payload) => {
+  const { store, render, refs } = deps;
+  const { _event: event } = payload;
+  event.preventDefault();
+  event.stopPropagation();
+  store.togglePreviewRotation();
+  render();
+  focusPreviewSurface(refs);
 };
 
 export const handleAfterMount = async (deps) => {

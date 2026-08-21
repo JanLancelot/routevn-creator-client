@@ -298,15 +298,25 @@ describe("vnPreview.handlers", () => {
       },
       graphicsService: {
         destroy: vi.fn(),
+        getCanvas: vi.fn(),
       },
       store: {
+        selectIsPreviewRotated: vi.fn(() => false),
+        setUiConfig: vi.fn(),
         setAssetLoading: vi.fn(),
         setPreviewReady: vi.fn(),
         resetAssetLoadCache: vi.fn(),
       },
+      uiConfig: {
+        inputMode: "touch",
+      },
     };
 
     const cleanup = handleBeforeMount(deps);
+
+    expect(deps.store.setUiConfig).toHaveBeenCalledWith({
+      uiConfig: deps.uiConfig,
+    });
 
     const enterEvent = {
       type: "keydown",
@@ -420,7 +430,128 @@ describe("vnPreview.handlers", () => {
       expect.any(Function),
       true,
     );
-    expect(addEventListener).toHaveBeenCalledTimes(2);
-    expect(removeEventListener).toHaveBeenCalledTimes(2);
+    [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "pointerover",
+      "pointerout",
+      "pointerleave",
+      "pointercancel",
+      "wheel",
+    ].forEach((eventType) => {
+      expect(addEventListener).toHaveBeenCalledWith(
+        eventType,
+        expect.any(Function),
+        true,
+      );
+      expect(removeEventListener).toHaveBeenCalledWith(
+        eventType,
+        expect.any(Function),
+        true,
+      );
+    });
+    expect(addEventListener).toHaveBeenCalledTimes(10);
+    expect(removeEventListener).toHaveBeenCalledTimes(10);
+  });
+
+  it("maps rotated pointer events back to the scene coordinate axes", async () => {
+    const { handleBeforeMount } = await import(
+      "../../src/components/vnPreview/vnPreview.handlers.js"
+    );
+    const listeners = {};
+    vi.stubGlobal("window", {
+      addEventListener: vi.fn((eventName, listener) => {
+        listeners[eventName] = listener;
+      }),
+      removeEventListener: vi.fn(),
+    });
+
+    const deps = {
+      dispatchEvent: vi.fn(),
+      refs: {},
+      graphicsService: {
+        destroy: vi.fn(),
+        getCanvas: vi.fn(() => ({
+          getBoundingClientRect: () => ({
+            left: 100,
+            top: 50,
+            width: 360,
+            height: 640,
+          }),
+        })),
+      },
+      store: {
+        selectIsPreviewRotated: vi.fn(() => true),
+        setUiConfig: vi.fn(),
+        setAssetLoading: vi.fn(),
+        setPreviewReady: vi.fn(),
+        resetAssetLoadCache: vi.fn(),
+      },
+      uiConfig: {
+        inputMode: "touch",
+      },
+    };
+    const cleanup = handleBeforeMount(deps);
+    const event = {
+      clientX: 460,
+      clientY: 50,
+    };
+
+    listeners.pointerdown(event);
+
+    expect(event).toMatchObject({
+      clientX: 100,
+      clientY: 50,
+    });
+    expect(deps.graphicsService.getCanvas).toHaveBeenCalledOnce();
+
+    const wheelEvent = {
+      clientX: 460,
+      clientY: 50,
+      deltaY: 120,
+    };
+
+    listeners.wheel(wheelEvent);
+
+    expect(wheelEvent).toMatchObject({
+      clientX: 100,
+      clientY: 50,
+      deltaY: 120,
+    });
+    expect(deps.graphicsService.getCanvas).toHaveBeenCalledTimes(2);
+
+    cleanup();
+  });
+
+  it("toggles rotation without forwarding the control click to the preview", async () => {
+    const { handleRotatePreview } = await import(
+      "../../src/components/vnPreview/vnPreview.handlers.js"
+    );
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+    const deps = {
+      refs: {
+        previewSurface: {
+          focus: vi.fn(),
+        },
+      },
+      render: vi.fn(),
+      store: {
+        togglePreviewRotation: vi.fn(),
+      },
+    };
+
+    handleRotatePreview(deps, { _event: event });
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(deps.store.togglePreviewRotation).toHaveBeenCalledTimes(1);
+    expect(deps.render).toHaveBeenCalledTimes(1);
+    expect(deps.refs.previewSurface.focus).toHaveBeenCalledWith({
+      preventScroll: true,
+    });
   });
 });

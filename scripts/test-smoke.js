@@ -29,6 +29,11 @@ import {
   parseBundle,
 } from "../src/deps/services/shared/projectExportService.js";
 import { toHierarchyStructure } from "../src/internal/project/tree.js";
+import {
+  calculateSceneReadingTimeMinutes,
+  formatSceneTextStatsLabel,
+  getSceneReadingSpeed,
+} from "../src/internal/ui/sceneTextStats.js";
 
 const projectId = "proj-smoke-001";
 const actor = {
@@ -836,4 +841,176 @@ assert.equal(disabledKeyboardRenderState.global.keyboard, undefined);
 
 assert.equal((await repository.loadEvents()).length, 15);
 
+assert.equal(getSceneReadingSpeed("en"), 200);
+assert.equal(getSceneReadingSpeed("ja"), 400);
+assert.equal(getSceneReadingSpeed("zh-Hans"), 400);
+
+assert.equal(calculateSceneReadingTimeMinutes({}, { language: "en" }), 0);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 1, wordCount: 50, characterCount: 250 },
+    { language: "en" },
+  ),
+  0,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 5, wordCount: 200, characterCount: 1000 },
+    { language: "en" },
+  ),
+  1,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 10, wordCount: 250, characterCount: 1250 },
+    { language: "en" },
+  ),
+  1,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 10, wordCount: 300, characterCount: 1500 },
+    { language: "en" },
+  ),
+  2,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 20, wordCount: 850, characterCount: 4250 },
+    { language: "en" },
+  ),
+  4,
+);
+
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 5, wordCount: 0, characterCount: 350 },
+    { language: "ja" },
+  ),
+  1,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 10, wordCount: 0, characterCount: 400 },
+    { language: "ja" },
+  ),
+  1,
+);
+assert.equal(
+  calculateSceneReadingTimeMinutes(
+    { lineCount: 10, wordCount: 0, characterCount: 600 },
+    { language: "zh-Hans" },
+  ),
+  2,
+);
+
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 0, wordCount: 0, characterCount: 0 },
+    { language: "en" },
+  ),
+  "0 lines 0 words",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 1, wordCount: 1, characterCount: 5 },
+    { language: "en" },
+  ),
+  "1 line 1 word < 1 min read",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 5, wordCount: 50, characterCount: 250 },
+    { language: "en" },
+  ),
+  "5 lines 50 words < 1 min read",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 10, wordCount: 200, characterCount: 1000 },
+    { language: "en" },
+  ),
+  "10 lines 200 words 1 min read",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 12, wordCount: 450, characterCount: 2250 },
+    { language: "en" },
+  ),
+  "12 lines 450 words 2 mins read",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 4, wordCount: 0, characterCount: 150 },
+    {
+      language: "ja",
+      copy: {
+        sceneTextStatsLineLabel: "{count}行",
+        sceneTextStatsLinesLabel: "{count}行",
+        sceneTextStatsCharacterLabel: "{count}文字",
+        sceneTextStatsCharactersLabel: "{count}文字",
+        sceneTextStatsReadingTimeUnderMinuteLabel: "読了 1分未満",
+        sceneTextStatsReadingTimeMinuteLabel: "読了 約{count}分",
+        sceneTextStatsReadingTimeMinutesLabel: "読了 約{count}分",
+      },
+    },
+  ),
+  "4行 150文字 読了 1分未満",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 8, wordCount: 0, characterCount: 600 },
+    {
+      language: "ja",
+      copy: {
+        sceneTextStatsLineLabel: "{count}行",
+        sceneTextStatsLinesLabel: "{count}行",
+        sceneTextStatsCharacterLabel: "{count}文字",
+        sceneTextStatsCharactersLabel: "{count}文字",
+        sceneTextStatsReadingTimeUnderMinuteLabel: "読了 1分未満",
+        sceneTextStatsReadingTimeMinuteLabel: "読了 約{count}分",
+        sceneTextStatsReadingTimeMinutesLabel: "読了 約{count}分",
+      },
+    },
+  ),
+  "8行 600文字 読了 約2分",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 4, wordCount: 0, characterCount: 150 },
+    {
+      language: "zh-Hans",
+      copy: {
+        sceneTextStatsLineLabel: "{count} 行",
+        sceneTextStatsLinesLabel: "{count} 行",
+        sceneTextStatsCharacterLabel: "{count} 个字",
+        sceneTextStatsCharactersLabel: "{count} 个字",
+        sceneTextStatsReadingTimeUnderMinuteLabel: "阅读时间 < 1 分钟",
+        sceneTextStatsReadingTimeMinuteLabel: "阅读时间约 {count} 分钟",
+        sceneTextStatsReadingTimeMinutesLabel: "阅读时间约 {count} 分钟",
+      },
+    },
+  ),
+  "4 行 150 个字 阅读时间 < 1 分钟",
+);
+assert.equal(
+  formatSceneTextStatsLabel(
+    { lineCount: 8, wordCount: 0, characterCount: 600 },
+    {
+      language: "zh-Hans",
+      copy: {
+        sceneTextStatsLineLabel: "{count} 行",
+        sceneTextStatsLinesLabel: "{count} 行",
+        sceneTextStatsCharacterLabel: "{count} 个字",
+        sceneTextStatsCharactersLabel: "{count} 个字",
+        sceneTextStatsReadingTimeUnderMinuteLabel: "阅读时间 < 1 分钟",
+        sceneTextStatsReadingTimeMinuteLabel: "阅读时间约 {count} 分钟",
+        sceneTextStatsReadingTimeMinutesLabel: "阅读时间约 {count} 分钟",
+      },
+    },
+  ),
+  "8 行 600 个字 阅读时间约 2 分钟",
+);
+
 console.log("Smoke tests: PASS");
+

@@ -4,6 +4,7 @@ import {
 } from "../projectLanguage.js";
 import { formatI18nCopy } from "./i18nCopy.js";
 import {
+  getSceneReadingSpeed,
   getSceneTextStatsCount,
   normalizeSceneTextStats,
 } from "../sceneTextStats.js";
@@ -47,5 +48,25 @@ export const formatSceneTextStatsLabel = (
     count: formatSceneTextStatsNumber(count),
   });
 
-  return `${lineLabel} ${textCountLabel}`;
+  if (count === 0) {
+    return `${lineLabel} ${textCountLabel}`;
+  }
+
+  const speed = getSceneReadingSpeed(language);
+  let readingTimeLabel;
+  if (count < speed) {
+    readingTimeLabel =
+      copy.sceneTextStatsReadingTimeUnderMinuteLabel ?? "< 1 min read";
+  } else {
+    const readingMinutes = Math.max(1, Math.round(count / speed));
+    const readingTimeTemplate =
+      readingMinutes === 1
+        ? (copy.sceneTextStatsReadingTimeMinuteLabel ?? "{count} min read")
+        : (copy.sceneTextStatsReadingTimeMinutesLabel ?? "{count} mins read");
+    readingTimeLabel = formatI18nCopy(readingTimeTemplate, {
+      count: formatSceneTextStatsNumber(readingMinutes),
+    });
+  }
+
+  return `${lineLabel} ${textCountLabel} ${readingTimeLabel}`;
 };

@@ -212,3 +212,26 @@ export const buildSceneTextStats = (scene = {}, { language } = {}) => {
     characterCount: countCharacters(text, normalizedLanguage),
   };
 };
+
+export const SCENE_READING_SPEED_WORDS_PER_MINUTE = 200;
+export const SCENE_READING_SPEED_CHARACTERS_PER_MINUTE = 400;
+
+export const getSceneReadingSpeed = (language) => {
+  const countMode = getProjectLanguageTextCountMode(language);
+  return countMode === PROJECT_TEXT_COUNT_MODE_CHARACTER
+    ? SCENE_READING_SPEED_CHARACTERS_PER_MINUTE
+    : SCENE_READING_SPEED_WORDS_PER_MINUTE;
+};
+
+export const calculateSceneReadingTimeMinutes = (
+  stats = {},
+  { language } = {},
+) => {
+  const count = getSceneTextStatsCount(stats, { language });
+  if (count <= 0) {
+    return 0;
+  }
+
+  const speed = getSceneReadingSpeed(language);
+  return Math.round(count / speed);
+};

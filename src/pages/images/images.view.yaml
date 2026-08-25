@@ -154,6 +154,10 @@ refs:
     eventListeners:
       click:
         handler: handleDetailHeaderClick
+  detailImagePreview:
+    eventListeners:
+      click:
+        handler: handleDetailImagePreviewClick
   detailTagSelect:
     eventListeners:
       value-change:
@@ -209,8 +213,7 @@ styles:
     box-shadow: 0 0 0 1px var(--border)
     border-radius: 6px
     overflow: hidden
-    cursor: default
-    pointer-events: none
+    cursor: pointer
 template:
   - 'rtgl-view d=h w=f h=f style="min-width: 0; min-height: 0;"':
       - 'rtgl-view d=h h=f w=f style="min-width: 0; min-height: 0;"':

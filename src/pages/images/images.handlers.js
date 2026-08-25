@@ -297,6 +297,22 @@ export const handleMobileDetailSheetClose = (deps) => {
   focusGroupView(deps);
 };
 
+export const handleDetailImagePreviewClick = (deps, payload) => {
+  payload?._event?.preventDefault?.();
+  payload?._event?.stopPropagation?.();
+
+  const selectedItemId = deps.store.selectSelectedItemId();
+  if (!selectedItemId) {
+    return;
+  }
+
+  openImagePreviewById({
+    deps,
+    itemId: selectedItemId,
+    syncExplorer: true,
+  });
+};
+
 export const handleMobileDetailPreviewClick = (deps, payload) => {
   payload?._event?.preventDefault?.();
   payload?._event?.stopPropagation?.();

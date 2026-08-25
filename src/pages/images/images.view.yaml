@@ -197,12 +197,6 @@ styles:
   ".imagePreviewEdgeNext":
     right: "0"
     background: linear-gradient(to left, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0))
-  ".imagePreviewTransparencyGrid":
-    background-color: "#eef2f7"
-    background-image: 'linear-gradient(45deg, #94a3b8 25%, transparent 25%), linear-gradient(-45deg, #94a3b8 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #94a3b8 75%), linear-gradient(-45deg, transparent 75%, #94a3b8 75%)'
-    background-position: "0 0, 0 12px, 12px -12px, -12px 0"
-    background-repeat: repeat
-    background-size: 24px 24px
   ".imagePreviewFrame":
     position: relative
     box-shadow: 0 0 0 1px var(--border)
@@ -249,7 +243,7 @@ template:
                                   - rvn-detail-view#detailView key=${selectedDetailId} w=f h=1fg :fields=${detailFields}:
                                       - $if selectedItemId:
                                           - $if selectedPreviewFileId:
-                                              - 'div#detailImagePreview.imageDetailPreviewFrame.imagePreviewTransparencyGrid slot="image-file-id"':
+                                              - 'div#detailImagePreview.imageDetailPreviewFrame slot="image-file-id"':
                                                   - rvn-file-image fileId=${selectedPreviewFileId} w=f h=f: null
                                           - rtgl-tag-select#detailTagSelect key=${selectedItemId} slot="image-tags" w=f :options=${tagFilterOptions} :selectedValues=${selectedItemTagIds} :draftSelectedValues=${detailTagDraftValues} :open=${isDetailTagSelectOpen} :addOption=${detailTagAddOption} :placeholder=${addTagPlaceholder}: null
                             $else:
@@ -309,7 +303,7 @@ template:
                       - 'rtgl-button#previewCanvasModeButton sq pre=canvas-scale v=${fullImagePreviewCanvasModeButton.variant} aria-label="${fullImagePreviewCanvasModeLabel}" aria-pressed="${fullImagePreviewCanvasModeButton.selected}" title="${fullImagePreviewCanvasModeLabel}"': null
                       - 'rtgl-button#previewFitModeButton sq pre=fit-to-frame v=${fullImagePreviewFitModeButton.variant} aria-label="${fullImagePreviewFitModeLabel}" aria-pressed="${fullImagePreviewFitModeButton.selected}" title="${fullImagePreviewFitModeLabel}"': null
               - rtgl-view pos=fix edge=f ah=c av=c z=3001:
-                  - 'div#previewImageFrame.imagePreviewFrame.imagePreviewTransparencyGrid style="${fullImagePreviewFrameStyle}"':
+                  - 'div#previewImageFrame.imagePreviewFrame style="${fullImagePreviewFrameStyle}"':
                       - 'div style="${fullImagePreviewImageWrapperStyle}"':
                           - rvn-file-image fileId=${fullImagePreviewFileId} w=f h=f: null
                       - $if fullImagePreviewPreviousVisible:
@@ -323,7 +317,7 @@ template:
                       - 'rtgl-button#previewCanvasModeButton sq pre=canvas-scale v=${fullImagePreviewCanvasModeButton.variant} aria-label="${fullImagePreviewCanvasModeLabel}" aria-pressed="${fullImagePreviewCanvasModeButton.selected}" title="${fullImagePreviewCanvasModeLabel}"': null
                       - 'rtgl-button#previewFitModeButton sq pre=fit-to-frame v=${fullImagePreviewFitModeButton.variant} aria-label="${fullImagePreviewFitModeLabel}" aria-pressed="${fullImagePreviewFitModeButton.selected}" title="${fullImagePreviewFitModeLabel}"': null
               - 'div style="${fullImagePreviewLayoutStyle}"':
-                  - 'div#previewImageFrame.imagePreviewFrame.imagePreviewTransparencyGrid style="${fullImagePreviewFrameStyle}"':
+                  - 'div#previewImageFrame.imagePreviewFrame style="${fullImagePreviewFrameStyle}"':
                       - 'div style="${fullImagePreviewImageWrapperStyle}"':
                           - rvn-file-image fileId=${fullImagePreviewFileId} w=f h=f: null
                       - $if fullImagePreviewPreviousVisible:

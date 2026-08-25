@@ -235,7 +235,7 @@ template:
                           - $if selectedDetailId:
                               - rtgl-view d=v w=f h=f:
                                   - rtgl-view h=48 w=f d=h bgc=bg bwb=xs pl=md pr=sm av=c g=xs:
-                                      - rtgl-view#detailHeader w=1fg d=h av=c g=sm cur=pointer style="min-width: 0;":
+                                      - 'rtgl-view#detailHeader w=1fg d=h av=c g=sm cur=pointer style="min-width: 0;"':
                                           - rtgl-text w=1fg ellipsis=true: ${selectedDetailName}
                                           - rtgl-svg svg=edit wh=16: null
                                       - $if selectedItemId:

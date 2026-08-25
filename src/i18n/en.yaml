@@ -937,6 +937,7 @@ audioEffectsEditorPage:
   valueTypeLabel: "Value type"
   volumePropertyLabel: "Volume"
 imagesPage:
+  deleteButton: "Delete"
   deleteTargetFallback: "this image"
   deleteTitle: "Delete Image"
   editTitle: "Edit Image"

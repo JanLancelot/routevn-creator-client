@@ -314,6 +314,19 @@ export const handleMobileDetailPreviewClick = (deps, payload) => {
   });
 };
 
+export const handleDetailDeleteClick = (deps, payload) => {
+  payload?._event?.preventDefault?.();
+  payload?._event?.stopPropagation?.();
+
+  const { store } = deps;
+  const selectedItemId = store.selectSelectedItemId();
+  if (!selectedItemId) {
+    return;
+  }
+
+  openImageDeleteDialog(deps, { itemId: selectedItemId });
+};
+
 export const handleMobileDetailDeleteClick = (deps, payload) => {
   payload?._event?.preventDefault?.();
   payload?._event?.stopPropagation?.();

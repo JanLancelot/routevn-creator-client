@@ -937,6 +937,7 @@ audioEffectsEditorPage:
   valueTypeLabel: "值类型"
   volumePropertyLabel: "音量"
 imagesPage:
+  deleteButton: "删除"
   deleteTargetFallback: "该图像"
   deleteTitle: "删除图像"
   editTitle: "编辑图像"

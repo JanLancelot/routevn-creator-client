@@ -63,6 +63,12 @@ refs:
         handler: handleMobileDetailDeleteClick
         preventDefault: true
         stopPropagation: true
+  detailDeleteButton:
+    eventListeners:
+      click:
+        handler: handleDetailDeleteClick
+        preventDefault: true
+        stopPropagation: true
   deleteDialog:
     eventListeners:
       close:
@@ -234,9 +240,12 @@ template:
                       - 'div#fileExplorerDetailKeyboardScope tabindex=-1 style="width: 100%; height: 100%; min-width: 0; min-height: 0; outline: none;"':
                           - $if selectedDetailId:
                               - rtgl-view d=v w=f h=f:
-                                  - rtgl-view#detailHeader h=48 w=f d=h bgc=bg bwb=xs ph=md av=c g=sm cur=pointer:
-                                      - rtgl-text w=1fg ellipsis=true: ${selectedDetailName}
-                                      - rtgl-svg svg=edit wh=16: null
+                                  - rtgl-view h=48 w=f d=h bgc=bg bwb=xs pl=md pr=sm av=c g=xs:
+                                      - rtgl-view#detailHeader w=1fg d=h av=c g=sm cur=pointer style="min-width: 0;":
+                                          - rtgl-text w=1fg ellipsis=true: ${selectedDetailName}
+                                          - rtgl-svg svg=edit wh=16: null
+                                      - $if selectedItemId:
+                                          - 'rtgl-button#detailDeleteButton sq v=gh pre=trash aria-label="${deleteButton}" title="${deleteButton}"': null
                                   - rvn-detail-view#detailView key=${selectedDetailId} w=f h=1fg :fields=${detailFields}:
                                       - $if selectedItemId:
                                           - $if selectedPreviewFileId:

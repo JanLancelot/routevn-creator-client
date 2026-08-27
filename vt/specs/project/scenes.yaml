@@ -292,6 +292,21 @@ steps:
     type: text
     selector: "#sceneTextStats"
     value: "5 lines 0 characters"
+  - action: select
+    selector: 'rvn-lexical-scene-document-editor .editor-paragraph[data-selected="true"]'
+    steps:
+      - action: click
+  - action: select
+    selector: "rvn-lexical-scene-document-editor #editor"
+    steps:
+      - action: write
+        value: "This is sample dialogue for reading time."
+  - action: wait
+    ms: 2500
+  - action: assert
+    type: text
+    selector: "#sceneTextStats"
+    value: "5 lines 35 characters < 1 min read"
   - action: assert
     type: visible
     selector: "#downloadCanvasButton"

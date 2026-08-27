@@ -1,36 +1,30 @@
-const scanObjectForIds = (obj, targetIdSet) => {
-  if (!obj || typeof obj !== "object") {
+const scanValueForIds = (value, targetIdSet) => {
+  if (typeof value === "string") {
+    if (targetIdSet.has(value)) {
+      return true;
+    }
+    if (value.includes("${")) {
+      for (const id of targetIdSet) {
+        if (value.includes(id)) {
+          return true;
+        }
+      }
+    }
     return false;
   }
 
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (typeof val === "string") {
-      if (targetIdSet.has(val)) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (scanValueForIds(item, targetIdSet)) {
         return true;
       }
-      if (val.includes("${")) {
-        for (const id of targetIdSet) {
-          if (val.includes(id)) {
-            return true;
-          }
-        }
-      }
-    } else if (Array.isArray(val)) {
-      for (const item of val) {
-        if (typeof item === "string" && targetIdSet.has(item)) {
-          return true;
-        }
-        if (
-          item &&
-          typeof item === "object" &&
-          scanObjectForIds(item, targetIdSet)
-        ) {
-          return true;
-        }
-      }
-    } else if (val && typeof val === "object") {
-      if (scanObjectForIds(val, targetIdSet)) {
+    }
+    return false;
+  }
+
+  if (value && typeof value === "object") {
+    for (const nested of Object.values(value)) {
+      if (scanValueForIds(nested, targetIdSet)) {
         return true;
       }
     }
@@ -57,7 +51,7 @@ export const findResourceSceneUsage = ({
     }
 
     const sections = scene.sections?.items ?? scene.sections;
-    if (scanObjectForIds(sections, targetIdSet)) {
+    if (scanValueForIds(sections, targetIdSet)) {
       matchingScenes.push({
         id: scene.id,
         name: scene.name || "Untitled Scene",

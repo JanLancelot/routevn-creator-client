@@ -14,11 +14,12 @@ import { clearResourcePageSelection } from "../resourceViewBackground.js";
 export const createMediaPageHandlers = ({
   resourceType,
   subscriptions,
-  syncData = ({ store, repositoryState }) =>
+  syncData = ({ store, repositoryState, scenes }) =>
     syncMediaPageData({
       store,
       repositoryState,
       resourceType,
+      scenes,
     }),
   selectItemById = (store, { itemId }) => store.selectItemById({ itemId }),
   getEditValues = (item) => ({
